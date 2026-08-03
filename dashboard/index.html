@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TAC / BUFR Workbench</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Manual Analysis</p>
+        <h1>TAC / BUFR 報文工作台</h1>
+      </div>
+      <div class="actions">
+        <button id="copyResult" type="button">複製結果</button>
+        <button id="clearAll" type="button">清除</button>
+      </div>
+    </header>
+
+    <main class="workbench">
+      <nav class="main-tabs" aria-label="工具切換">
+        <button class="active" data-tab="tac" type="button">報文翻譯器</button>
+        <button data-tab="recon" type="button">偵察/投落送</button>
+        <button data-tab="bufr" type="button">BUFR 解讀器</button>
+      </nav>
+
+      <section id="tacPanel" class="tool-panel active">
+        <div class="input-panel">
+          <div class="panel-head">
+            <h2>貼上 TAC 報文</h2>
+            <button id="translateTac" type="button">翻譯報文</button>
+          </div>
+          <div class="sample-row" aria-label="TAC 報文範例">
+            <span>TAC 報文範例</span>
+            <button id="sampleCwa" type="button">WTCI RCTP CWA 警報</button>
+          </div>
+          <div class="support-note" role="note">
+            TAC 報文解析目前限定西北太平洋與中北太平洋範圍；不支援預報理由報文（WDPN、WTPQ、WTPN）與熱帶氣旋展望報文（ABPW）。
+          </div>
+          <textarea id="tacInput" spellcheck="false" placeholder="例如：WTPQ20 BABJ 071200"></textarea>
+        </div>
+        <div class="output-panel">
+          <h2>翻譯結果</h2>
+          <div id="tacOutput" class="analysis empty">等待 TAC 報文輸入。</div>
+        </div>
+      </section>
+
+      <section id="reconPanel" class="tool-panel">
+        <div class="input-panel">
+          <div class="panel-head">
+            <h2>貼上偵察 / 投落送資料</h2>
+            <button id="translateRecon" type="button">解析資料</button>
+          </div>
+          <div class="support-note" role="note">
+            支援 NHC TCPOD 偵察飛行計畫、UZPQ/XXAA 投落送、無標頭 XXAA/XXBB TEMP DROP；這一區不混入一般颱風警報翻譯。
+          </div>
+          <textarea id="reconInput" spellcheck="false" placeholder="例如：XXAA 59022 99332 11404 ...&#10;&#10;XXBB 59028 99332 11404 ..."></textarea>
+        </div>
+        <div class="output-panel">
+          <h2>解析結果</h2>
+          <div id="reconOutput" class="analysis empty">等待偵察或投落送資料輸入。</div>
+        </div>
+      </section>
+
+      <section id="bufrPanel" class="tool-panel">
+        <div class="input-panel">
+          <div class="panel-head">
+            <h2>上傳 BUFR 檔</h2>
+            <label class="file-button">
+              <input id="bufrInput" type="file" accept=".bufr,application/octet-stream">
+              選擇 BUFR
+            </label>
+          </div>
+          <div id="dropZone" class="drop-zone">
+            <strong>拖放 BUFR 檔案到這裡</strong>
+            <span>解析器會讀取 BUFR envelope、WMO binary heading，並列出 ECMWF BUFR Validator 上傳適用性。</span>
+          </div>
+        </div>
+        <div class="output-panel">
+          <h2>BUFR 解讀結果</h2>
+          <div id="bufrOutput" class="analysis empty">等待 BUFR 檔案。</div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
