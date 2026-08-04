@@ -164,3 +164,7 @@ python -m py_compile typhoon_tac_parser/dashboard_server.py
 - 對未支援格式不硬猜；應顯示基本標頭、警告或未解析欄位。
 - BUFR 若缺少 table 展開工具，應只宣稱 envelope 與已知固定欄位解讀。
 - 新機構或新報文樣式應以範例驅動新增 parser 與測試。
+
+## 授權
+
+本專案採用 MIT License。詳見 [LICENSE](LICENSE)。
