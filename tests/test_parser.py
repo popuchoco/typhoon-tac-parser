@@ -41,5 +41,5 @@ def test_bufr_envelope_classifies_rjtd():
     parsed = parse_bufr_envelope(data)
     assert parsed["family"] == "bufr"
     assert parsed["heading"]["center"] == "RJTD"
-    assert parsed["issuing_agency"] == "Japan Meteorological Agency"
+    assert parsed["issuing_agency"] == "日本氣象廳"
     assert parsed["validation"]["provider"] == "ECMWF BUFR Validator"
