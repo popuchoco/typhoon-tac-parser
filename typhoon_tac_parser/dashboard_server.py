@@ -8,7 +8,10 @@ from urllib.parse import unquote
 
 from .bufr import parse_bufr_envelope
 from .centers import issuing_agency
-from .manager import MessageParserManager
+from .allowed_reports import interpret_allowed_report
+from .multi_track import interpret_multi_track as parse_multi_track
+from .prediction import forecast_track
+from .center_comparison import compare_center_reports
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +48,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         try:
+            if self.path == "/api/interpret-allowed-report":
+                self.interpret_allowed_report()
+                return
+            if self.path == "/api/interpret-multi-track":
+                self.interpret_multi_track()
+                return
+            if self.path == "/api/compare-centers":
+                self.compare_centers()
+                return
+            if self.path == "/api/manual-forecast":
+                self.manual_forecast()
+                return
             if self.path == "/api/translate-tac":
                 self.translate_tac()
                 return
@@ -92,9 +107,37 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             raise ValueError("raw must be a string.")
         return raw
 
+    def interpret_allowed_report(self) -> None:
+        raw = self._read_raw_text()
+        self.write_json(interpret_allowed_report(raw))
+
+    def interpret_multi_track(self) -> None:
+        raw = self._read_raw_text()
+        self.write_json(parse_multi_track(raw))
+
+    def compare_centers(self) -> None:
+        payload = self._read_json_object()
+        reports = payload.get("reports")
+        if not isinstance(reports, list):
+            raise ValueError("reports must be an array of {label, raw} objects.")
+        self.write_json(compare_center_reports(reports))
+
+    def manual_forecast(self) -> None:
+        payload = self._read_json_object()
+        try:
+            result = forecast_track(payload)
+        except ValueError as exc:
+            self.send_json_error(400, str(exc))
+            return
+        self.write_json(result)
+
     def translate_tac(self) -> None:
         raw = self._read_raw_text()
-        parsed = MessageParserManager().parse(raw)
+        allowed = interpret_allowed_report(raw)
+        if not allowed.get("supported"):
+            self.write_json(allowed)
+            return
+        parsed = allowed["parsed"]
         heading = parsed.get("heading") or {}
         issue_time = heading.get("issue_time") or {}
         response = {

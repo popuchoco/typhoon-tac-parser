@@ -113,6 +113,7 @@ function renderTacResult(payload, target = elements.tacOutput) {
   else if (family === "dvorak_tropical_satellite_analysis") renderTppnDvorak(root, parsed);
   else if (family === "hebert_poteat_subtropical_analysis") renderHebertPoteat(root, parsed);
   else if (family === "babj_numbered_telecode_bulletin") renderBabjTelecode(root, parsed);
+  else if (family === "babj_tropical_cyclone_landfall") renderBabjLandfall(root, parsed);
   else renderTropicalTac(root, parsed);
 
   target.replaceChildren(root);
@@ -240,6 +241,20 @@ function renderBabjTelecode(root, parsed) {
       group.raw || "-",
     ])));
   }
+}
+
+function renderBabjLandfall(root, parsed) {
+  const system = firstSystem(parsed);
+  const fields = system.fields || {};
+  const location = fields.landfall_location?.value || {};
+  root.appendChild(renderKeyValues("BABJ 登陸資訊", [
+    ["系統", system.identity],
+    ["分類", formatField(fields.classification)],
+    ["編號", formatField(fields.storm_number)],
+    ["登陸時間", formatTacTime(fields.analysis_time?.value || parsed.fields?.landfall_time)],
+    ["登陸地點", location.chinese || location.english],
+    ["風速", formatField(fields.max_wind)],
+  ]));
 }
 
 function renderTropicalTac(root, parsed) {
@@ -693,6 +708,7 @@ function translateFamily(family) {
     nhc_tcpod_recon_plan: "NHC TCPOD 偵察飛行計畫",
     agency_auto_dvorak_analysis: "氣象機構自動 Dvorak 分析",
     babj_numbered_telecode_bulletin: "BABJ 數字電碼報文",
+    babj_tropical_cyclone_landfall: "BABJ 熱帶氣旋登陸資訊",
     babj_compact_tropical_cyclone: "BABJ 熱帶氣旋發展報",
     babj_tropical_cyclone: "BABJ 熱帶氣旋報文",
     cwa_tropical_cyclone_warning: "中央氣象署熱帶氣旋警報",

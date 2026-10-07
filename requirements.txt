@@ -1,2 +1,1 @@
 pybufrkit>=0.2.22
-pytest>=8.0

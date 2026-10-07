@@ -230,6 +230,162 @@ class BabjWsciParser(BaseParser):
         ])
 
 
+class BabjLandfallParser(BaseParser):
+    """BABJ WHCI40 tropical-cyclone landfall information parser."""
+
+    LANDING_RE = re.compile(
+        r"\b(?P<classification>TY|TS|TD|STY)\s+"
+        r"(?P<number>\d{4})\s*\(\s*(?P<paren_number>\d{4})\s*\)\s+"
+        r"(?P<name>[A-Z][A-Z0-9-]*)\s+LANDED\s+ON\s+"
+        r"(?P<location>[^\r\n]+?)\s*$",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    TIME_RE = re.compile(r"\b(?P<time>\d{6})GMT\b", re.IGNORECASE)
+    WIND_RE = re.compile(r"\(\s*(?P<wind>\d{1,3})\s*(?P<unit>M/S|MS)\s*\)", re.IGNORECASE)
+
+    CLASSIFICATION_ZH = {
+        "TY": "颱風",
+        "TS": "熱帶風暴",
+        "TD": "熱帶低氣壓",
+        "STY": "超級颱風",
+    }
+    LOCATION_ZH = {
+        "YUHUAN ZHEJIANG PROVINCE": "浙江省玉環市",
+        "QUANZHOU FUJIAN PROVINCE": "福建省泉州市",
+    }
+
+    def supports(self, normalized: str) -> bool:
+        heading = parse_heading(normalized)
+        return bool(
+            heading
+            and heading.get("ttaa") == "WHCI"
+            and heading.get("center") == "BABJ"
+            and self.LANDING_RE.search(normalized)
+        )
+
+    def parse(self, raw: str) -> dict[str, Any]:
+        normalized = normalize_tac(raw)
+        heading = parse_heading(normalized)
+        result = ParseResult(
+            family="babj_tropical_cyclone_landfall",
+            raw=raw,
+            normalized=normalized,
+            heading=heading,
+        )
+        result.fields["source_profile"] = {
+            "value": "BABJ/NMC",
+            "meaning": "China National Meteorological Center tropical cyclone landfall information",
+            "confidence": "high",
+        }
+
+        landing = self.LANDING_RE.search(normalized)
+        if not landing:
+            result.warnings.append("No WHCI40 BABJ landfall statement was found.")
+            return result.to_dict()
+
+        classification_code = landing.group("classification").upper()
+        classification = self.CLASSIFICATION_ZH.get(classification_code, classification_code)
+        storm_number = landing.group("paren_number") or landing.group("number")
+        name = landing.group("name").upper()
+        location_en = re.sub(r"\s+", " ", landing.group("location").strip()).upper()
+        location_zh = self.LOCATION_ZH.get(location_en, location_en.title())
+
+        system_fields: dict[str, Any] = {
+            "name": Field(name, name, meaning="storm name").to_dict(),
+            "storm_number": Field(storm_number, storm_number, meaning="BABJ tropical cyclone number").to_dict(),
+            "classification": Field(classification_code, classification, meaning="tropical cyclone classification").to_dict(),
+            "landfall_location": Field(
+                location_en,
+                {"english": location_en, "chinese": location_zh},
+                meaning="landfall location",
+            ).to_dict(),
+            "event": Field(
+                landing.group(0).strip(),
+                "LANDFALL",
+                meaning="tropical cyclone event",
+            ).to_dict(),
+        }
+
+        time_match = self.TIME_RE.search(normalized)
+        if time_match:
+            time_token = time_match.group("time") + "GMT"
+            time_value = self._utc_time(time_match.group("time"), time_token)
+            result.fields["landfall_time"] = Field(
+                time_token,
+                time_value,
+                meaning="landfall time in UTC/GMT",
+            ).to_dict()
+            system_fields["analysis_time"] = Field(
+                time_token,
+                time_value,
+                meaning="landfall time in UTC/GMT",
+            ).to_dict()
+
+        wind_match = self.WIND_RE.search(normalized)
+        if wind_match:
+            wind = int(wind_match.group("wind"))
+            wind_field = Field(
+                wind_match.group(0),
+                wind,
+                "m/s",
+                "wind reported with the landfall statement",
+            ).to_dict()
+            result.fields["wind_at_landfall"] = wind_field
+            system_fields["max_wind"] = wind_field
+
+        system = {
+            "identity": name,
+            "raw": landing.group(0).strip(),
+            "fields": system_fields,
+            "discussion": [
+                f"{classification} {name}（編號{storm_number}）已在{location_zh}登陸。",
+            ],
+        }
+        result.systems.append(system)
+        result.fields["landfall_location"] = system_fields["landfall_location"]
+        result.fields["human_summary"] = self._summary(
+            heading,
+            classification,
+            name,
+            storm_number,
+            location_zh,
+            time_match.group("time") if time_match else "",
+            wind_match.group("wind") if wind_match else "",
+        )
+        return result.to_dict()
+
+    def _utc_time(self, digits: str, raw: str) -> dict[str, Any]:
+        return {
+            "day": int(digits[:2]),
+            "hour": int(digits[2:4]),
+            "minute": int(digits[4:6]),
+            "timezone": "UTC",
+            "raw": raw,
+        }
+
+    def _summary(
+        self,
+        heading: dict[str, Any] | None,
+        classification: str,
+        name: str,
+        storm_number: str,
+        location_zh: str,
+        time_digits: str,
+        wind: str,
+    ) -> str:
+        time_text = ""
+        if time_digits:
+            time_text = f"協調世界時{int(time_digits[:2])}日{int(time_digits[2:4]):02d}時{int(time_digits[4:6]):02d}分"
+        details = f"{classification} {name}（編號{storm_number}）已在{location_zh}登陸"
+        if time_text:
+            details = f"{time_text}，{details}"
+        if wind:
+            details += f"，報文標示風速為 {wind} m/s"
+        issue = heading.get("issue_time", {}).get("raw", "") if heading else ""
+        prefix = f"中國氣象局（BABJ）於{issue[:2]}日{issue[2:4]}時{issue[4:6]}分發布 WHCI40 熱帶氣旋登陸資訊。" if issue else "中國氣象局（BABJ）發布 WHCI40 熱帶氣旋登陸資訊。"
+        return f"{prefix}\n{details}。"
+
+
 class BabjForecastParser(TropicalCycloneParser):
     supported_headers = (
         "WTPQ20 BABJ",

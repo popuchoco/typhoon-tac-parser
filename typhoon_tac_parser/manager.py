@@ -4,7 +4,7 @@ from typing import Any
 
 from .bufr import decode_record_bytes, parse_bufr_envelope
 from .normalization import normalize_tac
-from .parsers.babj import BabjForecastParser, BabjWsciParser
+from .parsers.babj import BabjForecastParser, BabjLandfallParser, BabjWsciParser
 from .parsers.base import BaseParser
 from .parsers.cwa import CwaWarningParser
 from .parsers.dvts import DvtsAutoDvorakParser
@@ -12,8 +12,10 @@ from .parsers.dropsonde import DropsondeParser
 from .parsers.jtwc import JtwcParser
 from .parsers.knes import KnesDvorakParser, PhfoSatelliteFixParser
 from .parsers.metar import MetarParser
+from .parsers.pgtw import PgtwWarningParser
 from .parsers.rpmm import RpmmShippingWarningParser
 from .parsers.rksl import RkslKmaAdvisoryParser
+from .parsers.rjtd import RjtdTropicalCycloneParser
 from .parsers.tropical import TropicalCycloneParser
 from .parsers.tppn import TppnSubtropicalParser
 from .parsers.tcpod import NhcTcpodParser
@@ -30,11 +32,14 @@ class MessageParserManager:
             DvtsAutoDvorakParser(),
             CwaWarningParser(),
             BabjWsciParser(),
+            BabjLandfallParser(),
             BabjForecastParser(),
             TppnSubtropicalParser(),
-            JtwcParser(),
             KnesDvorakParser(),
             PhfoSatelliteFixParser(),
+            PgtwWarningParser(),
+            JtwcParser(),
+            RjtdTropicalCycloneParser(),
             RpmmShippingWarningParser(),
             RkslKmaAdvisoryParser(),
             VhhhTropicalCycloneWarningParser(),
