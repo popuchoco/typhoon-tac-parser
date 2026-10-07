@@ -13,6 +13,11 @@ from .manager import MessageParserManager
 
 ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD = ROOT / "dashboard"
+MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024
+
+
+class RequestBodyTooLarge(ValueError):
+    """Raised when an API request exceeds the local workbench size limit."""
 
 
 def title_from_parsed(parsed: dict) -> str:
@@ -39,18 +44,56 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         return content_type
 
     def do_POST(self) -> None:
-        if self.path == "/api/translate-tac":
-            self.translate_tac()
-            return
-        if self.path == "/api/decode-bufr":
-            self.decode_bufr()
-            return
-        self.send_error(404)
+        try:
+            if self.path == "/api/translate-tac":
+                self.translate_tac()
+                return
+            if self.path == "/api/decode-bufr":
+                self.decode_bufr()
+                return
+            self.send_error(404)
+        except RequestBodyTooLarge as exc:
+            self.send_json_error(413, str(exc))
+        except (UnicodeDecodeError, ValueError) as exc:
+            self.send_json_error(400, str(exc) or "Invalid request.")
+        except Exception as exc:
+            self.log_error("API request failed: %s", exc)
+            self.send_json_error(500, "The server could not process this request.")
+
+    def _read_request_body(self) -> bytes:
+        content_length = self.headers.get("Content-Length")
+        if content_length is None:
+            raise ValueError("Content-Length header is required.")
+        try:
+            length = int(content_length)
+        except ValueError as exc:
+            raise ValueError("Content-Length must be a non-negative integer.") from exc
+        if length < 0:
+            raise ValueError("Content-Length must be a non-negative integer.")
+        if length > MAX_REQUEST_BODY_BYTES:
+            raise RequestBodyTooLarge(
+                f"Request body exceeds the {MAX_REQUEST_BODY_BYTES}-byte limit."
+            )
+        data = self.rfile.read(length)
+        if len(data) != length:
+            raise ValueError("Request body ended before Content-Length bytes were received.")
+        return data
+
+    def _read_json_object(self) -> dict:
+        data = self._read_request_body()
+        payload = json.loads(data.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("JSON request body must be an object.")
+        return payload
+
+    def _read_raw_text(self) -> str:
+        raw = self._read_json_object().get("raw", "")
+        if not isinstance(raw, str):
+            raise ValueError("raw must be a string.")
+        return raw
 
     def translate_tac(self) -> None:
-        length = int(self.headers.get("Content-Length", "0"))
-        payload = json.loads(self.rfile.read(length).decode("utf-8"))
-        raw = payload.get("raw", "")
+        raw = self._read_raw_text()
         parsed = MessageParserManager().parse(raw)
         heading = parsed.get("heading") or {}
         issue_time = heading.get("issue_time") or {}
@@ -64,8 +107,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.write_json(response)
 
     def decode_bufr(self) -> None:
-        length = int(self.headers.get("Content-Length", "0"))
-        data = self.rfile.read(length)
+        data = self._read_request_body()
         parsed = parse_bufr_envelope(data)
         filename = unquote(self.headers.get("X-Filename", "uploaded.bufr"))
         self.write_json({"filename": filename, "parsed": parsed})
@@ -73,6 +115,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def write_json(self, payload: dict) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def send_json_error(self, status: int, message: str) -> None:
+        data = json.dumps({"error": message}, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()

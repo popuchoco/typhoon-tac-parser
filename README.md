@@ -48,6 +48,8 @@ python -m typhoon_tac_parser.dashboard_server 8820
 
 用於上傳 `.bufr` 檔。解析器會先讀取：
 
+Dashboard API request body limit: 10 MiB; malformed requests return JSON errors.
+
 - WMO binary heading
 - BUFR edition
 - BUFR declared length

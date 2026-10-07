@@ -8,7 +8,7 @@ TROPICAL_CYCLONE_CENTERS = {
     "BABJ": "中國氣象局",
     "RCTP": "交通部中央氣象署",
     "VHHH": "香港天文台",
-    "VMCC": "澳門地球物理氣象局",
+    "VMMC": "澳門地球物理氣象局",
     "RKSL": "韓國氣象廳",
     "RJTD": "日本氣象廳",
     "KNES": "NOAA衛星服務部",
