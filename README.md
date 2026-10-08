@@ -59,7 +59,9 @@ Dashboard API request body limit: 10 MiB; malformed requests return JSON errors.
 - `7777` 結尾
 - ECMWF BUFR Validator 上傳適用性
 
-若本機有 `pybufrkit` 或 ecCodes 類工具，才有機會進一步展開 BUFR descriptor。沒有 BUFR table 展開工具時，解析器只能保守顯示 envelope 與少量固定欄位。
+安裝 `requirements.txt` 會一併安裝 `pybufrkit`，用來解開 BUFR subset 與 descriptor。`IUCC` 熱帶氣旋衛星分析會按已辨識的序列轉成具名欄位；其他產品則以通用模式列出每個 subset 的欄位值、descriptor F-X-Y、名稱與單位，不會誤套 `IUCC` 的固定欄位位置。通用模式保留原始解碼值，不代表已完成該產品的氣象語義翻譯。
+
+如果回應顯示 `decoder_unavailable`，請確認啟動工作台的 Python 環境已安裝本專案依賴；`decode_failed` 則表示目前解碼器/descriptor tables 無法展開該檔，envelope 資訊仍會保留。
 
 ## 目前可解析的資料範圍
 
@@ -71,7 +73,7 @@ Dashboard API request body limit: 10 MiB; malformed requests return JSON errors.
 | BABJ 數字電碼 / TC 發展報 | `BABJ` | `WSCI40` 中文電碼、`TCPQ40` 位置、CI 強度、過去移動、雲型/發展碼與多系統列表。 | 未知四位碼會列為未解析；完整語義依電碼表覆蓋度而定。 |
 | METAR | ICAO 機場代碼 | 測站、ICAO 機場對照、觀測時間、風、能見度、雲、溫度/露點、QNH、趨勢與備註。 | 目前不是完整航空氣象電碼總解碼器；特殊天氣組仍需補規則。 |
 | 偵察 / 投落送 | `KNHC`、`RJTD`、`RCTP` 等已見格式 | NHC TCPOD 飛行計畫、`UZPQ` / `UZNT` / `UZPA` 類 `XXAA` / `XXBB` TEMP DROP、`61616` / `62626` 附加資訊、基本垂直層資料。 | 高度觀測/計算欄位尚非完整 TEMP 解碼；不應與一般颱風警報混用。 |
-| 熱帶氣旋 BUFR | `VHHH`、`RJTD` 及已辨識熱帶氣旋 BUFR 標頭 | BUFR envelope、WMO binary heading、中心/機構、時間、部分熱帶氣旋與 Dvorak 欄位。 | 只宣稱熱帶氣旋相關 BUFR 基本解讀；不支援所有 BUFR 模板。 |
+| BUFR | 依訊息標頭及可用 WMO/local descriptor tables 而定 | BUFR envelope、WMO binary heading、中心/機構、時間、subset 值、descriptor F-X-Y、名稱與單位；已識別的 `IUCC` 序列另提供熱帶氣旋衛星分析具名欄位。 | 通用欄位輸出不等同於產品語義翻譯；本機缺少對應 tables 或遇到未支援模板時可能無法展開。 |
 | BABJ 登陸資訊 | `WHCI BABJ` | 登陸事件、熱帶氣旋名稱/編號、分類、時間、地點與報文風速。 | 地名中文對照以已知詞彙表為限；其他地名保留原文或轉為標題格式。 |
 | 其他未支援報文 | 依產品與中心而異 | 保留原始報文；可讀取的標頭欄位仍會由通用解析器處理。 | 不硬猜未支援欄位；新增格式須以實際樣本與測試補規則。 |
 

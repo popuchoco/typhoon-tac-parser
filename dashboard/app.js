@@ -429,6 +429,24 @@ function renderBufrResult(payload) {
 
 function renderDecodedBufr(decoded) {
   const fields = decoded.fields || [];
+  if (decoded.kind === "generic_bufr") {
+    const section = div();
+    const sequence = decoded.unexpanded_descriptors || [];
+    section.appendChild(renderKeyValues(decoded.label || "一般 BUFR 解碼欄位", [
+      ["子集數", decoded.subset_count],
+      ["壓縮資料", decoded.is_compressed === undefined ? "" : decoded.is_compressed ? "是" : "否"],
+      ["未展開描述子", sequence.join(", ")],
+    ]));
+    section.appendChild(renderTable("BUFR 解碼欄位", ["子集", "序號", "描述子", "欄位名稱", "值", "單位"], fields.map((field) => [
+      field.subset,
+      field.index,
+      field.descriptor || "-",
+      field.descriptor_name || field.label || "-",
+      formatAny(field.value),
+      field.unit || "-",
+    ])));
+    return section;
+  }
   const get = (key) => fields.find((item) => item.key === key)?.value;
   const section = div();
   section.appendChild(renderKeyValues(decoded.label || "熱帶氣旋 BUFR 解碼", [

@@ -101,7 +101,10 @@ def parse_bufr_envelope(data: bytes) -> dict[str, Any]:
 
     heading = parse_wmo_binary_heading(data)
     center = heading["center"] if heading else None
-    decoded = decode_bufr_payload(data[marker:bufr_end])
+    decoded = decode_bufr_payload(
+        data[marker:bufr_end],
+        product_code=heading.get("ttaa") if heading else None,
+    )
     result = {
         "family": "bufr",
         "format": "BUFR",
@@ -131,7 +134,7 @@ def parse_bufr_envelope(data: bytes) -> dict[str, Any]:
     return result
 
 
-def decode_bufr_payload(payload: bytes) -> dict[str, Any] | None:
+def decode_bufr_payload(payload: bytes, product_code: str | None = None) -> dict[str, Any] | None:
     try:
         from pybufrkit.decoder import Decoder
         from pybufrkit.renderer import FlatJsonRenderer
@@ -141,24 +144,109 @@ def decode_bufr_payload(payload: bytes) -> dict[str, Any] | None:
         message = Decoder().process(payload)
         rendered = FlatJsonRenderer().render(message)
         flat = ast.literal_eval(rendered) if isinstance(rendered, str) else rendered
+        unexpanded_descriptors = flat[2][6] if len(flat) > 2 and len(flat[2]) > 6 else []
+        subsets = _flat_subset_values(flat)
         decoded: dict[str, Any] = {
             "status": "decoded",
             "table_group": str(getattr(message, "table_group_key", "")),
-            "unexpanded_descriptors": flat[2][6] if len(flat) > 2 and len(flat[2]) > 6 else [],
+            "unexpanded_descriptors": _json_safe(unexpanded_descriptors),
+            "subset_count": len(subsets),
+            "is_compressed": bool(flat[2][4]) if len(flat) > 2 and len(flat[2]) > 4 else False,
         }
-        values = _flat_subset_values(flat)
-        if values:
-            decoded["values"] = _iucc_tropical_cyclone_analysis(values)
+        if subsets:
+            # IUCC carries the WMO tropical-cyclone satellite-analysis sequence.
+            # Other BUFR products must not be interpreted using those fixed offsets.
+            if product_code == "IUCC" and 316052 in unexpanded_descriptors and len(subsets[0]) >= 32:
+                decoded["values"] = _iucc_tropical_cyclone_analysis(subsets[0])
+            else:
+                decoded["values"] = _generic_bufr_values(message, subsets, unexpanded_descriptors)
         return decoded
     except Exception as exc:
         return {"status": "decode_failed", "error": str(exc)}
 
 
-def _flat_subset_values(flat: list[Any]) -> list[Any]:
+def _flat_subset_values(flat: list[Any]) -> list[list[Any]]:
     try:
-        return flat[3][2][0]
+        subsets = flat[3][2]
+        if not isinstance(subsets, (list, tuple)):
+            return []
+        if not subsets:
+            return []
+        if isinstance(subsets[0], (list, tuple)):
+            return [list(subset) for subset in subsets]
+        return [list(subsets)]
     except Exception:
         return []
+
+
+def _generic_bufr_values(
+    message: Any,
+    subsets: list[list[Any]],
+    unexpanded_descriptors: list[Any],
+) -> dict[str, Any]:
+    """Return generic BUFR values with descriptor metadata when the decoder exposes it."""
+    template_data = getattr(getattr(message, "_template_data", None), "value", None)
+    descriptor_sets = getattr(template_data, "decoded_descriptors_all_subsets", []) or []
+    compressed_parameter = getattr(message, "is_compressed", None)
+    is_compressed = getattr(compressed_parameter, "value", compressed_parameter)
+    fields = []
+    for subset_index, values in enumerate(subsets):
+        descriptors = descriptor_sets[subset_index] if subset_index < len(descriptor_sets) else []
+        for value_index, value in enumerate(values):
+            descriptor = descriptors[value_index] if value_index < len(descriptors) else None
+            descriptor_id = getattr(descriptor, "id", None)
+            descriptor_code = None
+            if descriptor is not None:
+                try:
+                    descriptor_code = f"{descriptor.F}-{descriptor.X:02d}-{descriptor.Y:03d}"
+                except (AttributeError, TypeError, ValueError):
+                    descriptor_code = None
+            descriptor_name = getattr(descriptor, "name", None)
+            unit = getattr(descriptor, "unit", None)
+            field_label = descriptor_name or f"值 {value_index + 1}"
+            if descriptor_code:
+                field_label = f"{field_label} ({descriptor_code})"
+            fields.append(
+                {
+                    "key": f"subset_{subset_index + 1}_value_{value_index + 1}",
+                    "label": field_label,
+                    "subset": subset_index + 1,
+                    "index": value_index + 1,
+                    "descriptor": descriptor_code,
+                    "descriptor_id": descriptor_id,
+                    "descriptor_name": descriptor_name,
+                    "unit": unit,
+                    "value": _json_safe(value),
+                }
+            )
+
+    return {
+        "kind": "generic_bufr",
+        "label": "一般 BUFR 解碼欄位",
+        "subset_count": len(subsets),
+        "is_compressed": bool(is_compressed),
+        "unexpanded_descriptors": _json_safe(unexpanded_descriptors),
+        "fields": fields,
+    }
+
+
+def _json_safe(value: Any) -> Any:
+    """Convert pybufrkit values to JSON-safe primitives, including padded IA5 bytes."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", "replace").replace("\x00", "").strip()
+    if isinstance(value, bytearray):
+        return _json_safe(bytes(value))
+    if isinstance(value, dict):
+        return {str(_json_safe(key)): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):
+            return None
+        return value
+    if value is None or isinstance(value, (str, int, bool)):
+        return value
+    return str(value)
 
 
 def _decode_ascii(value: Any) -> str:

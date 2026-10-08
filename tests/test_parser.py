@@ -1,6 +1,8 @@
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
-from typhoon_tac_parser.bufr import parse_bufr_envelope
+from typhoon_tac_parser.bufr import _flat_subset_values, _generic_bufr_values, _json_safe, parse_bufr_envelope
 from typhoon_tac_parser import MessageParserManager
 
 
@@ -188,3 +190,35 @@ def test_bufr_envelope_classifies_rjtd():
     assert parsed["heading"]["center"] == "RJTD"
     assert parsed["issuing_agency"] == "日本氣象廳"
     assert parsed["validation"]["provider"] == "ECMWF BUFR Validator"
+
+
+def test_bufr_flat_values_preserve_all_subsets():
+    flat = [None, None, [11, "00000000", 2], [339, "00000000", [[1, 2], [3, 4]]]]
+    assert _flat_subset_values(flat) == [[1, 2], [3, 4]]
+
+
+def test_generic_bufr_values_are_json_safe_and_keep_descriptor_labels():
+    descriptor = SimpleNamespace(
+        id=1125,
+        F=0,
+        X=1,
+        Y=125,
+        name="WIGOS identifier series",
+        unit="Numeric",
+    )
+    message = SimpleNamespace(
+        _template_data=SimpleNamespace(
+            value=SimpleNamespace(decoded_descriptors_all_subsets=[[descriptor, None]])
+        ),
+        is_compressed=SimpleNamespace(value=False),
+    )
+
+    decoded = _generic_bufr_values(message, [[b"45011\x00\x00", 12]], [301150, 307096])
+
+    assert decoded["kind"] == "generic_bufr"
+    assert decoded["fields"][0]["descriptor"] == "0-01-125"
+    assert decoded["fields"][0]["descriptor_name"] == "WIGOS identifier series"
+    assert decoded["fields"][0]["value"] == "45011"
+    assert decoded["fields"][1]["value"] == 12
+    assert _json_safe(b"TAIPA GRANDE\x00\x00") == "TAIPA GRANDE"
+    json.dumps(decoded, ensure_ascii=False)
