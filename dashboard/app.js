@@ -117,6 +117,7 @@ function renderTacResult(payload, target = elements.tacOutput) {
   else if (family === "hebert_poteat_subtropical_analysis") renderHebertPoteat(root, parsed);
   else if (family === "babj_numbered_telecode_bulletin") renderBabjTelecode(root, parsed);
   else if (family === "babj_tropical_cyclone_landfall") renderBabjLandfall(root, parsed);
+  else if (family === "rjtd_tropical_cyclone_guidance") renderRjtdGuidance(root, parsed);
   else renderTropicalTac(root, parsed);
 
   target.replaceChildren(root);
@@ -289,6 +290,43 @@ function renderTropicalTac(root, parsed) {
 
   const forecasts = parsed.forecasts || flatForecasts(systems);
   if (forecasts.length) renderForecasts(root, forecasts);
+}
+
+function renderRjtdGuidance(root, parsed) {
+  const fields = parsed.systems?.[0]?.fields || {};
+  root.appendChild(renderKeyValues("RSMC 熱帶氣旋預報指引", [
+    ["氣旋名稱/編號", parsed.systems?.[0]?.identity],
+    ["分類", formatField(fields.classification)],
+    ["分析時間", formatField(fields.analysis_time)],
+    ["初始位置", formatGuidancePosition(fields.position)],
+    ["初始中心氣壓", formatField(fields.pressure)],
+    ["初始最大風速", formatField(fields.max_wind)],
+    ["預報模式", formatField(parsed.fields?.forecast_model)],
+  ]));
+  root.appendChild(renderTextBlock("資料說明", "表中氣壓與最大風速的變化量相對於 T=0；換算欄為初始值加上報文提供的變化量。這些是各時效預報點，不代表額外推算的路徑。"));
+  const forecasts = parsed.forecasts || [];
+  if (forecasts.length) {
+    root.appendChild(renderTable("預報時效", ["時效", "預報位置", "氣壓變化", "指引氣壓", "最大風變化", "指引最大風速"], forecasts.map((forecast) => [
+      forecast.tau,
+      formatGuidancePosition(forecast.position),
+      formatField(forecast.pressure_change_from_initial),
+      formatField(forecast.pressure),
+      formatField(forecast.max_wind_change_from_initial),
+      formatField(forecast.max_wind),
+    ])));
+  }
+}
+
+function formatGuidancePosition(field) {
+  const position = field?.value || field;
+  if (!position || typeof position !== "object" || !("lat" in position) || !("lon" in position)) {
+    return formatPosition(field);
+  }
+  const latitude = Number(position.lat);
+  const longitude = Number(position.lon);
+  const lat = `${Math.abs(latitude)}${latitude >= 0 ? "N" : "S"}`;
+  const lon = `${Math.abs(longitude)}${longitude >= 0 ? "E" : "W"}`;
+  return `${lat} ${lon}`;
 }
 
 function renderForecasts(root, forecasts) {

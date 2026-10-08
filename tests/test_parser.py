@@ -108,6 +108,30 @@ GUST  115KT
     assert parsed["forecasts"][0]["movement"]["value"]["qualifier"] == "SLOWLY"
 
 
+def test_rjtd_fxpq_guidance_parses_geps_deltas_and_forecast_points():
+    parsed = MessageParserManager().parse((ROOT / "examples" / "FXPQ31_RJTD.txt").read_text())
+
+    assert parsed["family"] == "rjtd_tropical_cyclone_guidance"
+    assert parsed["heading"]["ttaa"] == "FXPQ"
+    assert parsed["heading"]["center"] == "RJTD"
+    assert parsed["systems"][0]["identity"] == "CHOI-WAN / 2627"
+    system_fields = parsed["systems"][0]["fields"]
+    assert system_fields["position"]["value"] == {"lat": 25.2, "lon": 146.6}
+    assert system_fields["pressure"]["value"] == 925
+    assert system_fields["max_wind"]["value"] == 95
+    assert parsed["fields"]["forecast_model"]["value"] == "GLOBAL ENSEMBLE PREDICTION SYSTEM"
+    assert len(parsed["forecasts"]) == 22
+    assert parsed["forecasts"][0]["tau"] == "T=006"
+    assert parsed["forecasts"][0]["position"]["value"] == {"lat": 26.3, "lon": 146.2}
+    assert parsed["forecasts"][0]["pressure_change_from_initial"]["value"] == 0
+    assert parsed["forecasts"][0]["pressure"]["value"] == 925
+    assert parsed["forecasts"][0]["max_wind"]["value"] == 101
+    assert parsed["forecasts"][-1]["tau"] == "T=132"
+    assert parsed["forecasts"][-1]["pressure"]["value"] == 966
+    assert parsed["forecasts"][-1]["max_wind"]["value"] == 50
+    assert not parsed["warnings"]
+
+
 def test_pgtw_warning_parses_current_forecasts_and_quadrant_radii():
     raw = """WTPN33 PGTW 081500
 MSGID/GENADMIN/JOINT TYPHOON WRNCEN PEARL HARBOR HI//
