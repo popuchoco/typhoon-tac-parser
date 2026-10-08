@@ -16,6 +16,8 @@ from .parsers.pgtw import PgtwWarningParser
 from .parsers.rpmm import RpmmShippingWarningParser
 from .parsers.rksl import RkslKmaAdvisoryParser
 from .parsers.rjtd import RjtdGuidanceParser, RjtdTropicalCycloneParser
+from .parsers.rjtd_tc_advisory import RjtdTcAdvisoryParser
+from .parsers.phfo import PhfoIcaoAdvisoryParser, PhfoTcmcpAdvisoryParser
 from .parsers.tropical import TropicalCycloneParser
 from .parsers.tppn import TppnSubtropicalParser
 from .parsers.tcpod import NhcTcpodParser
@@ -40,7 +42,10 @@ class MessageParserManager:
             PgtwWarningParser(),
             JtwcParser(),
             RjtdGuidanceParser(),
+            RjtdTcAdvisoryParser(),
             RjtdTropicalCycloneParser(),
+            PhfoIcaoAdvisoryParser(),
+            PhfoTcmcpAdvisoryParser(),
             RpmmShippingWarningParser(),
             RkslKmaAdvisoryParser(),
             VhhhTropicalCycloneWarningParser(),

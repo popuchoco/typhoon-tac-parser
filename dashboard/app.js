@@ -118,6 +118,9 @@ function renderTacResult(payload, target = elements.tacOutput) {
   else if (family === "babj_numbered_telecode_bulletin") renderBabjTelecode(root, parsed);
   else if (family === "babj_tropical_cyclone_landfall") renderBabjLandfall(root, parsed);
   else if (family === "rjtd_tropical_cyclone_guidance") renderRjtdGuidance(root, parsed);
+  else if (family === "rjtd_tc_advisory") renderRjtdTcAdvisory(root, parsed);
+  else if (family === "phfo_icao_tropical_cyclone_advisory") renderPhfoIcaoAdvisory(root, parsed);
+  else if (family === "phfo_tcmcp_advisory") renderPhfoTcmcpAdvisory(root, parsed);
   else renderTropicalTac(root, parsed);
 
   target.replaceChildren(root);
@@ -317,6 +320,112 @@ function renderRjtdGuidance(root, parsed) {
   }
 }
 
+function renderRjtdTcAdvisory(root, parsed) {
+  const fields = parsed.systems?.[0]?.fields || {};
+  const cbArea = fields.cb_area?.value || {};
+  root.appendChild(renderKeyValues("RJTD TC Advisory", [
+    ["產品代碼", formatField(parsed.fields?.product_code)],
+    ["氣旋名稱/編號", parsed.systems?.[0]?.identity],
+    ["TCAC", formatField(parsed.fields?.tropical_cyclone_advisory_center)],
+    ["發報時間", formatField(parsed.fields?.advisory_time)],
+    ["觀測時間", formatField(fields.analysis_time)],
+    ["觀測位置", formatHemispherePosition(fields.position)],
+    ["移動", formatMovement(fields.movement)],
+    ["中心氣壓", formatField(fields.pressure)],
+    ["最大風速", formatField(fields.max_wind)],
+    ["強度變化", formatField(fields.intensity_change)],
+    ["下一報文", formatField(parsed.fields?.next_message)],
+  ]));
+  if (cbArea.boundary?.length) {
+    root.appendChild(renderKeyValues("CB 雲區", [
+      ["頂高", cbArea.top_flight_level ? `FL${cbArea.top_flight_level}` : "未提供"],
+      ["界線點數", cbArea.boundary.length],
+    ]));
+    root.appendChild(renderTable("CB 區域界線座標", ["序號", "位置"], cbArea.boundary.map((point, index) => [
+      index + 1,
+      `${formatCoordinate(point.lat, "lat")} ${formatCoordinate(point.lon, "lon")}`,
+    ])));
+  }
+  if (parsed.forecasts?.length) {
+    root.appendChild(renderTable("預報時效", ["時效", "有效時間 (UTC)", "預報中心", "最大風速"], parsed.forecasts.map((forecast) => [
+      forecast.tau,
+      formatAnyField(forecast.valid_time),
+      formatHemispherePosition(forecast.position),
+      formatField(forecast.max_wind),
+    ])));
+  }
+  if (parsed.remarks?.length) root.appendChild(renderTextBlock("備註", parsed.remarks.join("\n")));
+}
+
+function renderPhfoIcaoAdvisory(root, parsed) {
+  const fields = parsed.systems?.[0]?.fields || {};
+  root.appendChild(renderKeyValues("PHFO TCAPA2 航空熱帶氣旋諮詢", [
+    ["氣旋名稱/編號", parsed.systems?.[0]?.identity],
+    ["分類", formatField(fields.classification)],
+    ["觀測時間", formatField(fields.analysis_time)],
+    ["觀測位置", formatHemispherePosition(fields.position)],
+    ["移動", formatMovement(fields.movement)],
+    ["中心氣壓", formatField(fields.pressure)],
+    ["最大風速", formatField(fields.max_wind)],
+    ["強度變化", formatField(fields.intensity_change)],
+    ["下一報文", formatField(parsed.fields?.next_message)],
+  ]));
+  if (parsed.forecasts?.length) {
+    root.appendChild(renderTable("航空預報位置", ["時效", "有效時間 (UTC)", "預報中心", "最大風速"], parsed.forecasts.map((forecast) => [
+      forecast.tau,
+      formatAnyField(forecast.valid_time),
+      formatHemispherePosition(forecast.position),
+      formatField(forecast.max_wind),
+    ])));
+  }
+  if (parsed.remarks?.length) root.appendChild(renderTextBlock("備註", parsed.remarks.join("\n")));
+}
+
+function renderPhfoTcmcpAdvisory(root, parsed) {
+  const fields = parsed.systems?.[0]?.fields || {};
+  root.appendChild(renderKeyValues("PHFO TCMCP2 熱帶氣旋預報諮詢", [
+    ["氣旋名稱/編號", parsed.systems?.[0]?.identity],
+    ["分析時間", formatField(fields.analysis_time)],
+    ["目前中心", formatHemispherePosition(fields.position)],
+    ["定位精度", formatField(fields.position_accuracy)],
+    ["移動", formatMovement(fields.movement)],
+    ["中心氣壓", formatField(fields.pressure)],
+    ["最大風速", formatField(fields.max_wind)],
+    ["最大陣風", formatField(fields.gust)],
+  ]));
+  renderPhfoQuadrantRadii(root, "目前風圈", fields.wind_radii, "wind");
+  renderPhfoQuadrantRadii(root, "目前海浪半徑", fields.sea_radii, "sea");
+  const forecasts = parsed.forecasts || [];
+  if (forecasts.length) {
+    root.appendChild(renderTable("預報/展望時效", ["類型", "有效時間 (UTC)", "預報中心", "最大風速", "最大陣風", "狀態"], forecasts.map((forecast) => [
+      forecast.kind === "outlook" ? "展望" : "預報",
+      formatAnyField(forecast.valid_time),
+      formatHemispherePosition(forecast.position),
+      formatField(forecast.max_wind),
+      formatField(forecast.gust),
+      formatField(forecast.status),
+    ])));
+    forecasts.forEach((forecast) => {
+      const time = formatAnyField(forecast.valid_time);
+      renderPhfoQuadrantRadii(root, `${time} 風圈`, forecast.wind_radii, "wind");
+      renderPhfoQuadrantRadii(root, `${time} 海浪半徑`, forecast.sea_radii, "sea");
+    });
+  }
+  if (parsed.fields?.message_parts) root.appendChild(renderKeyValues("多部分報文", [["已收到部分", formatField(parsed.fields.message_parts)]]));
+  if (parsed.warnings?.length) root.appendChild(renderTextBlock("解析提示", parsed.warnings.join("\n")));
+  if (parsed.remarks?.length) root.appendChild(renderTextBlock("備註", parsed.remarks.join("\n")));
+}
+
+function renderPhfoQuadrantRadii(root, title, radii, type) {
+  if (!radii?.length) return;
+  const headers = type === "sea" ? ["海浪門檻", "象限", "半徑"] : ["風速門檻", "象限", "半徑"];
+  root.appendChild(renderTable(title, headers, radii.map((radius) => [
+    type === "sea" ? `${radius.sea_height_m} m` : `${radius.threshold_kt} kt`,
+    radius.quadrant,
+    `${radius.radius_nm} nm`,
+  ])));
+}
+
 function formatGuidancePosition(field) {
   const position = field?.value || field;
   if (!position || typeof position !== "object" || !("lat" in position) || !("lon" in position)) {
@@ -327,6 +436,14 @@ function formatGuidancePosition(field) {
   const lat = `${Math.abs(latitude)}${latitude >= 0 ? "N" : "S"}`;
   const lon = `${Math.abs(longitude)}${longitude >= 0 ? "E" : "W"}`;
   return `${lat} ${lon}`;
+}
+
+function formatHemispherePosition(field) {
+  const position = field?.value || field;
+  if (!position || typeof position !== "object" || !("lat" in position) || !("lon" in position)) {
+    return formatPosition(field);
+  }
+  return `${formatCoordinate(Number(position.lat), "lat")} ${formatCoordinate(Number(position.lon), "lon")}`;
 }
 
 function renderForecasts(root, forecasts) {
@@ -871,6 +988,10 @@ function translateFamily(family) {
     vmmc_tropical_cyclone_signal: "澳門熱帶氣旋信號",
     rpmm_tropical_cyclone_warning: "PAGASA 航海熱帶氣旋警報",
     rksl_tropical_cyclone_advisory: "韓國氣象廳熱帶氣旋報文",
+    rjtd_tropical_cyclone_guidance: "RJTD RSMC 熱帶氣旋預報指引",
+    rjtd_tc_advisory: "RJTD 熱帶氣旋 TC Advisory",
+    phfo_icao_tropical_cyclone_advisory: "PHFO TCAPA2 航空熱帶氣旋諮詢",
+    phfo_tcmcp_advisory: "PHFO TCMCP2 熱帶氣旋預報諮詢",
     tropical_cyclone: "熱帶氣旋報文",
     jtwc_tropical_cyclone: "JTWC 熱帶氣旋報文",
   };

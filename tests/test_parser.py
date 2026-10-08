@@ -132,6 +132,124 @@ def test_rjtd_fxpq_guidance_parses_geps_deltas_and_forecast_points():
     assert not parsed["warnings"]
 
 
+def test_phfo_tcapa2_parses_compact_positions_and_forecast_winds():
+    parsed = MessageParserManager().parse((ROOT / "examples" / "TCAPA2_PHFO.txt").read_text())
+
+    assert parsed["family"] == "phfo_icao_tropical_cyclone_advisory"
+    system = parsed["systems"][0]
+    assert system["fields"]["position"]["value"] == {"lat": 24.2, "lon": 180.0}
+    assert system["fields"]["pressure"]["value"] == 959
+    assert system["fields"]["max_wind"]["value"] == 100
+    assert len(parsed["forecasts"]) == 6
+    assert parsed["forecasts"][0]["position"]["value"] == {"lat": 24.4, "lon": 179.21666666666667}
+    assert parsed["forecasts"][0]["max_wind"]["value"] == 105
+
+
+def test_phfo_tcmcp2_combined_parts_keeps_forecast_radii():
+    parsed = MessageParserManager().parse((ROOT / "examples" / "TCMCP2_PHFO_parts.txt").read_text())
+
+    assert parsed["family"] == "phfo_tcmcp_advisory"
+    system = parsed["systems"][0]
+    assert system["fields"]["position"]["value"] == {"lat": 23.4, "lon": -175.1}
+    assert system["fields"]["pressure"]["value"] == 957
+    assert system["fields"]["max_wind"]["value"] == 100
+    assert system["fields"]["gust"]["value"] == 120
+    assert len(system["fields"]["wind_radii"]) == 12
+    assert len(system["fields"]["sea_radii"]) == 4
+    assert len(parsed["forecasts"]) == 8
+    assert parsed["forecasts"][0]["wind_radii"][0] == {
+        "quadrant": "NE", "radius_nm": 35, "threshold_kt": 64,
+    }
+    assert parsed["forecasts"][5]["valid_time"]["value"] == "07/0000Z"
+    assert parsed["forecasts"][5]["max_wind"]["value"] == 85
+    assert parsed["fields"]["message_parts"]["value"] == [1, 2]
+    assert not parsed["warnings"]
+
+
+def test_rjtd_fkpq32_tc_advisory_handles_nbsp_line_escapes_and_cb_polygon():
+    body = """FKPQ32 RJTD 080600
+TC ADVISORY
+DTG: 20261008/0600Z
+TCAC: TOKYO
+TC: NOLO
+ADVISORY NR: 2026/14
+OBS PSN: 08/0600Z N2720 E15410
+CB: WI N2450 E15325 - N2515 E15205 - N2820 E15210
+- N2805 E15505 - N2550 E15505 - N2450 E15325
+TOP FL560
+MOV: WNW 17KT
+INTST CHANGE: NC
+C: 985HPA
+MAX WIND: 60KT
+FCST PSN +6 HR: 08/1200Z N2740 E15235
+FCST MAX WIND +6 HR: 60KT
+FCST PSN +12 HR: 08/1800Z N2800 E15100
+FCST MAX WIND +12 HR: 60KT
+FCST PSN +18 HR: 09/0000Z N2830 E14955
+FCST MAX WIND +18 HR: 65KT
+FCST PSN +24 HR: 09/0600Z N2900 E14900
+FCST MAX WIND +24 HR: 65KT
+RMK: NIL
+NXT MSG: 20261008/1200Z"""
+    # Reproduce the pasted-message form from gateways that replace ordinary
+    # spaces with NBSP and append a literal backslash to each wrapped line.
+    raw = "\n".join(line.replace(" ", "\u00a0") + "\\" for line in body.splitlines())
+    parsed = MessageParserManager().parse(raw)
+
+    assert parsed["family"] == "rjtd_tc_advisory"
+    assert parsed["fields"]["product_code"]["value"] == "FKPQ32"
+    assert parsed["systems"][0]["identity"] == "NOLO / 2026/14"
+    fields = parsed["systems"][0]["fields"]
+    assert fields["position"]["value"] == {"lat": 27 + 20 / 60, "lon": 154 + 10 / 60}
+    assert fields["cb_area"]["value"]["top_flight_level"] == 560
+    assert len(fields["cb_area"]["value"]["boundary"]) == 6
+    assert fields["movement"]["value"] == {"direction": "WNW", "speed": 17}
+    assert fields["intensity_change"]["value"] == "NC"
+    assert fields["pressure"]["value"] == 985
+    assert len(parsed["forecasts"]) == 4
+    assert parsed["forecasts"][-1]["position"]["value"] == {"lat": 29.0, "lon": 149.0}
+    assert parsed["forecasts"][-1]["max_wind"]["value"] == 65
+    assert parsed["fields"]["next_message"]["value"] == "20261008/1200Z"
+    assert not parsed["warnings"]
+
+
+def test_rjtd_fkpq31_tc_advisory_distinguishes_second_bulletin_product():
+    raw = """FKPQ31 RJTD 080600
+TC ADVISORY
+DTG: 20261008/0600Z
+TCAC: TOKYO
+TC: KOGUMA
+ADVISORY NR: 2026/16
+OBS PSN: 08/0600Z N1730 E16020
+CB: WI N1350 E16015 - N1425 E15805 - N1705 E15720
+- N1910 E15825 - N1720 E16205 - N1520 E16205 - N1350 E16015
+TOP FL540
+MOV: WNW 10KT
+INTST CHANGE: INTSF
+C: 990HPA
+MAX WIND: 55KT
+FCST PSN +6 HR: 08/1200Z N1750 E15905
+FCST MAX WIND +6 HR: 60KT
+FCST PSN +12 HR: 08/1800Z N1800 E15750
+FCST MAX WIND +12 HR: 60KT
+FCST PSN +18 HR: 09/0000Z N1830 E15635
+FCST MAX WIND +18 HR: 65KT
+FCST PSN +24 HR: 09/0600Z N1905 E15530
+FCST MAX WIND +24 HR: 70KT
+RMK: NIL
+NXT MSG: 20261008/1200Z ="""
+    parsed = MessageParserManager().parse(raw)
+
+    assert parsed["family"] == "rjtd_tc_advisory"
+    assert parsed["fields"]["product_code"]["value"] == "FKPQ31"
+    assert parsed["systems"][0]["identity"] == "KOGUMA / 2026/16"
+    assert parsed["systems"][0]["fields"]["position"]["value"] == {"lat": 17.5, "lon": 160 + 20 / 60}
+    assert parsed["systems"][0]["fields"]["cb_area"]["value"]["top_flight_level"] == 540
+    assert parsed["systems"][0]["fields"]["intensity_change"]["meaning"] == "增強中"
+    assert parsed["forecasts"][-1]["position"]["value"] == {"lat": 19 + 5 / 60, "lon": 155.5}
+    assert parsed["forecasts"][-1]["max_wind"]["value"] == 70
+
+
 def test_pgtw_warning_parses_current_forecasts_and_quadrant_radii():
     raw = """WTPN33 PGTW 081500
 MSGID/GENADMIN/JOINT TYPHOON WRNCEN PEARL HARBOR HI//

@@ -44,7 +44,7 @@ python -m typhoon_tac_parser.dashboard_server 8820
 
 用於貼上 TAC 文字報文並產生中文解析結果。適合已支援的熱帶氣旋警報、Dvorak 衛星分析、BABJ 數字電碼、METAR 等。
 
-目前已加入部分熱帶氣旋產品的結構化解析，包括 `WTPQ BABJ`、`WTPQ RJTD`、`WTPN PGTW` 與 `WHCI BABJ`。同一產品代碼的其他中心或不同版型仍需逐例補上解析規則；未支援的報文不會被硬猜。
+目前已加入部分熱帶氣旋產品的結構化解析，包括 `WTPQ BABJ`、`WTPQ RJTD`、`FKPQ31/32 RJTD`、`FKPA22 PHFO` (`TCAPA2`)、`WTPA22 PHFO` (`TCMCP2`)、`WTPN PGTW` 與 `WHCI BABJ`。`TCMCP2` 為多部分報文；若要還原跨部分延續的風圈資料，請將各部分依序一併貼入。未支援的中心或不同版型仍需逐例補規則，不會硬猜欄位。
 
 ### 偵察 / 投落送
 
@@ -74,7 +74,7 @@ python -m typhoon_tac_parser.dashboard_server 8820
 
 | 資料類型 | 支援機構 / 中心 | 可解析內容 | 限制 |
 | --- | --- | --- | --- |
-| 熱帶氣旋 TAC 警報與預報 | `RCTP`、`VHHH`、`VMMC`、`RKSL`、`RPMM`、`BABJ`、`RJTD`、`PGTW` | 基本標頭、機構、中心、時間、系統名稱/編號、定位、氣壓、最大風、移動、風圈與可辨識的預報欄位；另支援 `FXPQ RJTD` RSMC 指引的 GEPS 時效、位置及相對 T=0 的氣壓/風速變化。 | 目前以西北太平洋與中北太平洋為主；各中心產品格式不同，特殊欄位仍需逐例補強。 |
+| 熱帶氣旋 TAC 警報與預報 | `RCTP`、`VHHH`、`VMMC`、`RKSL`、`RPMM`、`BABJ`、`RJTD`、`PHFO`、`PGTW` | 基本標頭、機構、中心、時間、系統名稱/編號、定位、氣壓、最大風、移動、風圈與可辨識的預報欄位；支援 `FXPQ RJTD` GEPS 指引、`FKPQ31/32 RJTD` TC Advisory (含 CB 區域頂高及多邊形邊界)、`TCAPA2` 航空諮詢與 `TCMCP2` 多部分預報/象限風圈。 | 目前以已見樣本格式為範圍；`TCMCP2` 各部分需要依序合併，單獨解析延續部分時會提示缺少前文。 |
 | Dvorak / 衛星定位 TAC | `PGTW`、`KNES`、`PHFO` | T/CI、DT/MET/PT、24h 趨勢、短期趨勢、影像通道、定位方式、備註翻譯與分析對象分級。 | 自由文字備註依已建立詞彙翻譯；新句型可能仍會保留英文片段。 |
 | 機構自動 Dvorak 一行式 | `PGTW`、`KNES`、`DEMS`、`RCTP`、`RJTD` 等行尾機構碼 | 洋域、氣旋編號、時間、位置、風速、T/CI、D/S/W 趨勢與發報單位；支援多行批次轉換。 | 只支援已知欄位順序的 `DVTS` 類型。 |
 | BABJ 數字電碼 / TC 發展報 | `BABJ` | `WSCI40` 中文電碼、`TCPQ40` 位置、CI 強度、過去移動、雲型/發展碼與多系統列表。 | 未知四位碼會列為未解析；完整語義依電碼表覆蓋度而定。 |
