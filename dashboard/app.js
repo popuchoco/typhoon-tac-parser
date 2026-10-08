@@ -84,7 +84,10 @@ async function decodeBufrFile(file) {
     if (!response.ok) throw new Error(await response.text());
     renderBufrResult(await response.json());
   } catch (error) {
-    renderEmpty(elements.bufrOutput, `解析失敗：${error.message}`);
+    const message = error instanceof TypeError && error.message === "Failed to fetch"
+      ? "無法連線到解析服務。請確認使用 http://127.0.0.1:8766/ 開啟工作台，且 dashboard_server 正在執行。"
+      : error.message;
+    renderEmpty(elements.bufrOutput, `解析失敗：${message}`);
   }
 }
 
