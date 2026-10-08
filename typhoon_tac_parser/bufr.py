@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import ast
 import json
+import logging
+import math
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -16,6 +18,7 @@ WMO_BINARY_HEADING_RE = re.compile(rb"(?P<ttaa>[A-Z]{4})(?P<ii>\d{0,2})\s+(?P<ce
 
 
 ISSUING_CENTERS = TROPICAL_CYCLONE_CENTERS
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -139,6 +142,7 @@ def decode_bufr_payload(payload: bytes, product_code: str | None = None) -> dict
         from pybufrkit.decoder import Decoder
         from pybufrkit.renderer import FlatJsonRenderer
     except Exception as exc:
+        LOGGER.warning("BUFR decoder is unavailable: %s", exc)
         return {"status": "decoder_unavailable", "error": str(exc)}
     try:
         message = Decoder().process(payload)
@@ -159,9 +163,12 @@ def decode_bufr_payload(payload: bytes, product_code: str | None = None) -> dict
             if product_code == "IUCC" and 316052 in unexpanded_descriptors and len(subsets[0]) >= 32:
                 decoded["values"] = _iucc_tropical_cyclone_analysis(subsets[0])
             else:
-                decoded["values"] = _generic_bufr_values(message, subsets, unexpanded_descriptors)
+                decoded["values"] = _generic_bufr_values(
+                    message, subsets, unexpanded_descriptors, product_code=product_code
+                )
         return decoded
     except Exception as exc:
+        LOGGER.exception("BUFR payload decoding failed")
         return {"status": "decode_failed", "error": str(exc)}
 
 
@@ -183,6 +190,7 @@ def _generic_bufr_values(
     message: Any,
     subsets: list[list[Any]],
     unexpanded_descriptors: list[Any],
+    product_code: str | None = None,
 ) -> dict[str, Any]:
     """Return generic BUFR values with descriptor metadata when the decoder exposes it."""
     template_data = getattr(getattr(message, "_template_data", None), "value", None)
@@ -220,7 +228,7 @@ def _generic_bufr_values(
                 }
             )
 
-    return {
+    result = {
         "kind": "generic_bufr",
         "label": "一般 BUFR 解碼欄位",
         "subset_count": len(subsets),
@@ -228,6 +236,90 @@ def _generic_bufr_values(
         "unexpanded_descriptors": _json_safe(unexpanded_descriptors),
         "fields": fields,
     }
+    # IUCC10's repeated 0-01-027 groups identify separate tropical cyclones.
+    # Keep the generic descriptor table intact while exposing only confidently
+    # identified point locations as cyclone records for the BUFR dashboard map.
+    if product_code == "IUCC" and {1027, 19150, 19106}.issubset(set(unexpanded_descriptors)):
+        storms = _extract_iucc_storms(message, subsets)
+        if storms:
+            result["storms"] = storms
+            result["label"] = "IUCC 熱帶氣旋衛星分析"
+    return result
+
+
+def _extract_iucc_storms(message: Any, subsets: list[list[Any]]) -> list[dict[str, Any]]:
+    """Extract cyclone identity and center coordinates from repeated IUCC descriptors."""
+    template_data = getattr(getattr(message, "_template_data", None), "value", None)
+    descriptor_sets = getattr(template_data, "decoded_descriptors_all_subsets", []) or []
+    storms: list[dict[str, Any]] = []
+
+    for subset_index, values in enumerate(subsets):
+        descriptors = descriptor_sets[subset_index] if subset_index < len(descriptor_sets) else []
+        storm_starts = [
+            index for index, descriptor in enumerate(descriptors)
+            if getattr(descriptor, "id", None) == 1027
+        ]
+        for storm_index, start in enumerate(storm_starts):
+            end = storm_starts[storm_index + 1] if storm_index + 1 < len(storm_starts) else min(len(descriptors), len(values))
+            block = list(zip(descriptors[start:end], values[start:end]))
+            record = {
+                "subset": subset_index + 1,
+                "name": None,
+                "international_number": None,
+                "tc_identifier": None,
+                "latitude": None,
+                "longitude": None,
+            }
+            descriptor_fields = {
+                1027: "name",
+                19150: "international_number",
+                19106: "tc_identifier",
+                5001: "latitude",
+                5002: "latitude",
+                6001: "longitude",
+                6002: "longitude",
+            }
+            for descriptor, value in block:
+                field = descriptor_fields.get(getattr(descriptor, "id", None))
+                if field is None or record[field] is not None:
+                    continue
+                safe_value = _json_safe(value)
+                if field in {"name", "international_number"}:
+                    text_value = str(safe_value).strip() if safe_value is not None else ""
+                    record[field] = text_value or None
+                elif field == "tc_identifier":
+                    record[field] = safe_value
+                else:
+                    try:
+                        numeric_value = float(safe_value)
+                    except (TypeError, ValueError):
+                        continue
+                    if math.isfinite(numeric_value):
+                        record[field] = numeric_value
+            # A storm block is useful on a map only when it has usable identity
+            # and a complete, valid coordinate pair. Retain a single missing
+            # international number as None (e.g. WMO name "nameless").
+            if record["name"] is None and record["tc_identifier"] is None:
+                continue
+            latitude, longitude = record["latitude"], record["longitude"]
+            if not _valid_coordinates(latitude, longitude):
+                continue
+            storms.append(record)
+    return storms
+
+
+def _valid_coordinates(latitude: Any, longitude: Any) -> bool:
+    try:
+        latitude_value = float(latitude)
+        longitude_value = float(longitude)
+    except (TypeError, ValueError):
+        return False
+    return (
+        math.isfinite(latitude_value)
+        and math.isfinite(longitude_value)
+        and -90 <= latitude_value <= 90
+        and -180 <= longitude_value <= 180
+    )
 
 
 def _json_safe(value: Any) -> Any:
@@ -250,6 +342,8 @@ def _json_safe(value: Any) -> Any:
 
 
 def _decode_ascii(value: Any) -> str:
+    if value is None:
+        return ""
     if isinstance(value, str):
         return value.strip()
     if isinstance(value, bytes):
@@ -294,11 +388,24 @@ def _iucc_tropical_cyclone_analysis(values: list[Any]) -> dict[str, Any]:
         ("final_t_number", "FINAL TROPICAL (T) NUMBER", values[30] if len(values) > 30 else None),
         ("final_t_type", "TYPE OF FINAL T-NUMBER", values[31] if len(values) > 31 else None),
     ]
-    return {
+    decoded = {
         "kind": "tropical_cyclone_satellite_analysis",
         "label": "熱帶氣旋衛星強度分析",
         "fields": [{"key": key, "label": label, "value": value} for key, label, value in fields],
     }
+    storm = {
+        "subset": 1,
+        "name": _decode_ascii(values[10]) if len(values) > 10 else None,
+        "international_number": _decode_ascii(values[11]) if len(values) > 11 else None,
+        "tc_identifier": values[12] if len(values) > 12 else None,
+        "latitude": values[14] if len(values) > 14 else None,
+        "longitude": values[15] if len(values) > 15 else None,
+    }
+    if _valid_coordinates(storm["latitude"], storm["longitude"]):
+        storm["latitude"] = float(storm["latitude"])
+        storm["longitude"] = float(storm["longitude"])
+        decoded["storms"] = [storm]
+    return decoded
 
 
 def _dvorak_trend_code(value: Any) -> dict[str, Any] | None:

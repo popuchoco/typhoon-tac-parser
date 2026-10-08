@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -13,7 +14,12 @@ from .manager import MessageParserManager
 
 ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD = ROOT / "dashboard"
+if not DASHBOARD.is_dir():
+    installed_dashboard = Path(sys.prefix) / "dashboard"
+    if installed_dashboard.is_dir():
+        DASHBOARD = installed_dashboard
 MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024
+LOGGER = logging.getLogger(__name__)
 
 
 class RequestBodyTooLarge(ValueError):
@@ -57,8 +63,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except (UnicodeDecodeError, ValueError) as exc:
             self.send_json_error(400, str(exc) or "Invalid request.")
         except Exception as exc:
-            self.log_error("API request failed: %s", exc)
+            LOGGER.exception("Dashboard API request failed path=%s", self.path)
             self.send_json_error(500, "The server could not process this request.")
+
+    def log_message(self, fmt: str, *args) -> None:
+        LOGGER.info("%s - %s", self.address_string(), fmt % args)
 
     def _read_request_body(self) -> bytes:
         content_length = self.headers.get("Content-Length")
@@ -130,9 +139,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.getLogger("typhoon_tac_parser").setLevel(logging.INFO)
+    LOGGER.setLevel(logging.INFO)
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8766
     server = ThreadingHTTPServer(("127.0.0.1", port), DashboardHandler)
-    print(f"Serving TAC / BUFR workbench at http://127.0.0.1:{port}/")
+    LOGGER.info("Serving TAC / BUFR workbench at http://127.0.0.1:%s/", port)
     server.serve_forever()
 
 

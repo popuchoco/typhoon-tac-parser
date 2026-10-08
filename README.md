@@ -2,7 +2,7 @@
 
 Typhoon TAC Parser 是一個本機用的氣象報文工作台，目標是把常見熱帶氣旋 TAC、部分航空天氣報、偵察/投落送資料，以及熱帶氣旋 BUFR 轉成較容易閱讀的中文解析結果。
 
-本專案的範圍是**報文解析**：從原始報文擷取可辨識欄位並呈現結構化結果。它不做路徑繪圖、手動座標預測、地圖疊圖或多中心路徑比較；這些功能屬於獨立的 [Typhoon Tracker](https://github.com/popuchoco/typhoon-tracker) 專案。
+本專案的範圍是**報文解析**：從原始報文擷取可辨識欄位並呈現結構化結果。它不做路徑繪圖、手動座標預測或多中心路徑比較；這些功能屬於獨立的 [Typhoon Tracker](https://github.com/popuchoco/typhoon-tracker) 專案。BUFR 解碼若含有可辨識的熱帶氣旋中心位置，會在 OSM 底圖上顯示單點/多點位置標記，不連接歷史軌跡或預報路徑。
 
 這個專案目前偏向「案例驅動」的解析器：已建立規則的機構與資料類型可以結構化解讀；未列入支援範圍的報文，可能只能讀出 WMO 標頭，或需要人工翻譯與補規則。
 
@@ -12,6 +12,12 @@ Typhoon TAC Parser 是一個本機用的氣象報文工作台，目標是把常�
 
 ```bash
 python -m pip install -r requirements.txt
+```
+
+若要以可編輯套件方式安裝並包含測試工具：
+
+```bash
+python -m pip install -e ".[dev]"
 ```
 
 啟動本機工作台：
@@ -50,16 +56,17 @@ python -m typhoon_tac_parser.dashboard_server 8820
 
 用於上傳 `.bufr` 檔。解析器會先讀取：
 
-Dashboard API request body limit: 10 MiB; malformed requests return JSON errors.
-
 - WMO binary heading
 - BUFR edition
 - BUFR declared length
 - Section 1 / 3 / 4 基本結構
 - `7777` 結尾
 - ECMWF BUFR Validator 上傳適用性
+- 若辨識出熱帶氣旋位置，顯示 OSM 單點/多點標記及名稱、國際編號、氣旋識別碼；不繪製路徑
 
-安裝 `requirements.txt` 會一併安裝 `pybufrkit`，用來解開 BUFR subset 與 descriptor。`IUCC` 熱帶氣旋衛星分析會按已辨識的序列轉成具名欄位；其他產品則以通用模式列出每個 subset 的欄位值、descriptor F-X-Y、名稱與單位，不會誤套 `IUCC` 的固定欄位位置。通用模式保留原始解碼值，不代表已完成該產品的氣象語義翻譯。
+安裝 `requirements.txt` 會一併安裝 `pybufrkit`，用來解開 BUFR subset 與 descriptor。已辨識的 `IUCC` 熱帶氣旋衛星分析會按描述子轉成具名氣旋資料；`IUCC10` 重複氣旋群組會逐筆辨識名稱、國際編號、熱帶氣旋識別碼與中心座標，地圖依各中心以編號標記。其他產品則以通用模式列出每個 subset 的欄位值、descriptor F-X-Y、名稱與單位，不會誤套固定欄位位置。通用模式保留原始解碼值，不代表已完成該產品的氣象語義翻譯。地圖需網路連線，並顯示 © OpenStreetMap contributors。
+
+本機 Dashboard API 請求本文上限為 10 MiB；格式錯誤時會回傳 JSON 錯誤。服務請求、BUFR 解碼失敗與資料抓取錯誤會記錄於啟動工作台的終端機。
 
 如果回應顯示 `decoder_unavailable`，請確認啟動工作台的 Python 環境已安裝本專案依賴；`decode_failed` 則表示目前解碼器/descriptor tables 無法展開該檔，envelope 資訊仍會保留。
 

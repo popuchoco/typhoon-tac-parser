@@ -1,4 +1,4 @@
-const state = { activeTab: "tac" };
+const state = { activeTab: "tac", bufrMap: null };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
@@ -391,6 +391,7 @@ function renderTcpod(root, parsed) {
 }
 
 function renderBufrResult(payload) {
+  clearCycloneMap();
   const parsed = payload.parsed || {};
   const bufr = parsed.bufr || {};
   const validation = parsed.validation || {};
@@ -428,6 +429,8 @@ function renderBufrResult(payload) {
   if (parsed.warnings?.length) root.appendChild(renderNotice(parsed.warnings.join("\n")));
   elements.bufrOutput.replaceChildren(root);
   elements.bufrOutput.classList.remove("empty");
+  const storms = parsed.decoded?.values?.storms || [];
+  if (storms.length) initializeCycloneMap(storms);
 }
 
 function renderDecodedBufr(decoded) {
@@ -438,8 +441,10 @@ function renderDecodedBufr(decoded) {
     section.appendChild(renderKeyValues(decoded.label || "一般 BUFR 解碼欄位", [
       ["子集數", decoded.subset_count],
       ["壓縮資料", decoded.is_compressed === undefined ? "" : decoded.is_compressed ? "是" : "否"],
+      ["辨識到的熱帶氣旋", decoded.storms?.length ?? ""],
       ["未展開描述子", sequence.join(", ")],
     ]));
+    if (decoded.storms?.length) section.appendChild(renderCycloneMapSection(decoded.storms));
     section.appendChild(renderTable("BUFR 解碼欄位", ["子集", "序號", "描述子", "欄位名稱", "值", "單位"], fields.map((field) => [
       field.subset,
       field.index,
@@ -464,6 +469,7 @@ function renderDecodedBufr(decoded) {
     ["雲區直徑碼", get("overcast_cloud_diameter_code")],
     ["24h 強度變化碼", get("intensity_change_24h_code")],
   ]));
+  if (decoded.storms?.length) section.appendChild(renderCycloneMapSection(decoded.storms));
   section.appendChild(renderKeyValues("Dvorak / 衛星強度", [
     ["CI number", get("ci_number")],
     ["DT number", get("dt_number")],
@@ -480,6 +486,95 @@ function renderDecodedBufr(decoded) {
     formatAny(field.value),
   ])));
   return section;
+}
+
+function renderCycloneMapSection(storms) {
+  const section = document.createElement("section");
+  section.className = "table-section cyclone-map-section";
+  const heading = document.createElement("h3");
+  heading.textContent = `BUFR 熱帶氣旋位置標記（${storms.length} 個）`;
+  section.appendChild(heading);
+  const note = document.createElement("p");
+  note.className = "map-note";
+  note.textContent = "僅顯示本份 BUFR 報文提供的中心位置，不連接路徑或推算後續位置。";
+  section.appendChild(note);
+  const map = document.createElement("div");
+  map.className = "cyclone-map";
+  map.id = "bufrCycloneMap";
+  map.setAttribute("role", "img");
+  map.setAttribute("aria-label", "BUFR 熱帶氣旋中心位置地圖");
+  section.appendChild(map);
+  section.appendChild(renderTable("氣旋識別與中心位置", ["標記", "名稱", "國際編號", "熱帶氣旋識別碼", "緯度", "經度"], storms.map((storm, index) => [
+    index + 1,
+    cycloneDisplayName(storm),
+    storm.international_number || "-",
+    storm.tc_identifier ?? "-",
+    storm.latitude,
+    storm.longitude,
+  ])));
+  return section;
+}
+
+function initializeCycloneMap(storms) {
+  const mapElement = document.getElementById("bufrCycloneMap");
+  if (!mapElement) return;
+  const locations = storms.filter((storm) => Number.isFinite(Number(storm.latitude)) && Number.isFinite(Number(storm.longitude)));
+  if (!locations.length) return;
+  if (!window.L) {
+    mapElement.textContent = "地圖程式庫未載入；上方氣旋位置表仍可使用。";
+    return;
+  }
+  const map = L.map(mapElement, { scrollWheelZoom: false });
+  state.bufrMap = map;
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+  }).addTo(map);
+  const markers = [];
+  locations.forEach((storm, index) => {
+    const latitude = Number(storm.latitude);
+    const longitude = Number(storm.longitude);
+    const name = cycloneDisplayName(storm);
+    const marker = L.marker([latitude, longitude], {
+      icon: L.divIcon({
+        className: "cyclone-marker-icon",
+        html: `<span>${index + 1}</span>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      }),
+    }).addTo(map);
+    const markerLabel = document.createElement("span");
+    markerLabel.textContent = `${name}${storm.international_number ? ` · ${storm.international_number}` : ` · TC ${storm.tc_identifier ?? "?"}`}`;
+    marker.bindTooltip(markerLabel, { permanent: true, direction: "top", offset: [0, -10], className: "cyclone-map-label" });
+    const popup = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = name;
+    popup.appendChild(title);
+    const details = document.createElement("div");
+    details.textContent = `國際編號：${storm.international_number || "-"}；氣旋識別碼：${storm.tc_identifier ?? "-"}`;
+    popup.appendChild(details);
+    const coordinates = document.createElement("div");
+    coordinates.textContent = `中心位置：${latitude}, ${longitude}`;
+    popup.appendChild(coordinates);
+    marker.bindPopup(popup);
+    markers.push(marker);
+  });
+  const bounds = L.featureGroup(markers).getBounds();
+  map.fitBounds(bounds.isValid() ? bounds.pad(locations.length === 1 ? 0.6 : 0.25) : L.latLngBounds([[locations[0].latitude, locations[0].longitude]]), { maxZoom: 5 });
+  if (locations.length === 1) map.setZoom(Math.max(map.getZoom(), 4));
+  window.setTimeout(() => map.invalidateSize(), 0);
+}
+
+function cycloneDisplayName(storm) {
+  const name = String(storm.name || "").trim();
+  return !name || /^(nameless|unnamed|no name)$/i.test(name) ? "未命名" : name;
+}
+
+function clearCycloneMap() {
+  if (state.bufrMap) {
+    state.bufrMap.remove();
+    state.bufrMap = null;
+  }
 }
 
 function firstSystem(parsed) {
@@ -547,6 +642,7 @@ function renderNotice(text) {
 }
 
 function renderEmpty(target, text) {
+  if (target === elements.bufrOutput) clearCycloneMap();
   target.textContent = text;
   target.classList.add("empty");
 }

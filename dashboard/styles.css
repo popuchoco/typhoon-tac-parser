@@ -283,6 +283,52 @@ th {
   color: var(--warn);
 }
 
+.cyclone-map-section {
+  overflow: hidden;
+}
+
+.map-note {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cyclone-map {
+  width: 100%;
+  height: 360px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #e8eef2;
+}
+
+.cyclone-marker-icon {
+  border: 0;
+  background: transparent;
+}
+
+.cyclone-marker-icon span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #c4382b;
+  box-shadow: 0 1px 5px #26323899;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cyclone-map-label {
+  border: 1px solid #52616d;
+  border-radius: 4px;
+  background: #fff;
+  color: #17202a;
+  font-weight: 600;
+}
+
 @media (max-width: 900px) {
   .topbar {
     align-items: stretch;

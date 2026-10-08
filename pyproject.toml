@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "typhoon-tac-parser"
+version = "0.1.0"
+description = "Parse tropical cyclone TAC and selected BUFR bulletins."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["pybufrkit>=0.2.22"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/popuchoco/typhoon-tac-parser"
+Repository = "https://github.com/popuchoco/typhoon-tac-parser"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+typhoon-tac-parser = "typhoon_tac_parser.cli:main"
+typhoon-tac-parser-dashboard = "typhoon_tac_parser.dashboard_server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["typhoon_tac_parser*"]
+namespaces = false
+
+[tool.setuptools.data-files]
+dashboard = ["dashboard/index.html", "dashboard/app.js", "dashboard/styles.css"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -4,6 +4,7 @@ import argparse
 import base64
 from html.parser import HTMLParser
 import json
+import logging
 import re
 import urllib.error
 import urllib.request
@@ -30,6 +31,7 @@ DEFAULT_SOURCES = (
     VHHH_HIMAWARI_SAREP_BUFR_INDEX,
     RJTD_HIMAWARI_SAREP_BUFR_INDEX,
 )
+LOGGER = logging.getLogger(__name__)
 
 
 class DirectoryLinkParser(HTMLParser):
@@ -128,6 +130,7 @@ def crawl_urls(urls: Iterable[str]) -> list[dict[str, str]]:
             try:
                 product_urls = directory_product_links(url)
             except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+                LOGGER.warning("Unable to crawl directory %s: %s", url, exc)
                 records.append({"source": "error", "url": url, "fetched_at": fetched_at, "error": str(exc), "raw": ""})
                 continue
             if not product_urls:
@@ -138,6 +141,7 @@ def crawl_urls(urls: Iterable[str]) -> list[dict[str, str]]:
         try:
             binary, content_type = fetch_binary(url)
         except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+            LOGGER.warning("Unable to fetch %s: %s", url, exc)
             records.append({"source": "error", "url": url, "fetched_at": fetched_at, "error": str(exc), "raw": ""})
             continue
         center = center_from_url(url)
@@ -166,6 +170,8 @@ def crawl_urls(urls: Iterable[str]) -> list[dict[str, str]]:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    LOGGER.setLevel(logging.INFO)
     parser = argparse.ArgumentParser(description="Fetch tropical cyclone TAC bulletins.")
     parser.add_argument("--url", action="append", help="Bulletin URL. Can be repeated.")
     parser.add_argument("--output", default="data/raw_bulletins.jsonl")
@@ -178,6 +184,7 @@ def main() -> None:
     with output.open("w", encoding="utf-8") as handle:
         for record in records:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    LOGGER.info("Wrote %s bulletin records to %s", len(records), output)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from typhoon_tac_parser.bufr import _flat_subset_values, _generic_bufr_values, _json_safe, parse_bufr_envelope
+from typhoon_tac_parser.bufr import _flat_subset_values, _generic_bufr_values, _iucc_tropical_cyclone_analysis, _json_safe, parse_bufr_envelope
 from typhoon_tac_parser import MessageParserManager
 
 
@@ -222,3 +222,70 @@ def test_generic_bufr_values_are_json_safe_and_keep_descriptor_labels():
     assert decoded["fields"][1]["value"] == 12
     assert _json_safe(b"TAIPA GRANDE\x00\x00") == "TAIPA GRANDE"
     json.dumps(decoded, ensure_ascii=False)
+
+
+def test_iucc_multi_cyclone_repetition_extracts_identity_and_positions():
+    descriptors = [
+        SimpleNamespace(id=1027, F=0, X=1, Y=27, name="WMO LONG STORM NAME", unit="CCITT IA5"),
+        SimpleNamespace(id=19150, F=0, X=19, Y=150, name="TYPHOON INTERNATIONAL COMMON NUMBER", unit="CCITT IA5"),
+        SimpleNamespace(id=19106, F=0, X=19, Y=106, name="IDENTIFICATION NUMBER OF TROPICAL CYCLONE", unit="Numeric"),
+        SimpleNamespace(id=8005, F=0, X=8, Y=5, name="METEOROLOGICAL ATTRIBUTE SIGNIFICANCE", unit="Code table"),
+        SimpleNamespace(id=5002, F=0, X=5, Y=2, name="LATITUDE (COARSE ACCURACY)", unit="degree"),
+        SimpleNamespace(id=6002, F=0, X=6, Y=2, name="LONGITUDE (COARSE ACCURACY)", unit="degree"),
+    ]
+    values = [
+        b"Choi-wan  ", b"2627", 33, 1, 25.16, 146.6,
+        b"nameless  ", b"    ", 34, 1, 10.41, 168.05,
+    ]
+    repeated_descriptors = descriptors + descriptors
+    message = SimpleNamespace(
+        _template_data=SimpleNamespace(
+            value=SimpleNamespace(decoded_descriptors_all_subsets=[repeated_descriptors])
+        ),
+        is_compressed=SimpleNamespace(value=False),
+    )
+
+    decoded = _generic_bufr_values(
+        message,
+        [values],
+        [1027, 19150, 19106],
+        product_code="IUCC",
+    )
+
+    assert decoded["kind"] == "generic_bufr"
+    assert decoded["label"] == "IUCC 熱帶氣旋衛星分析"
+    assert decoded["storms"] == [
+        {
+            "subset": 1,
+            "name": "Choi-wan",
+            "international_number": "2627",
+            "tc_identifier": 33,
+            "latitude": 25.16,
+            "longitude": 146.6,
+        },
+        {
+            "subset": 1,
+            "name": "nameless",
+            "international_number": None,
+            "tc_identifier": 34,
+            "latitude": 10.41,
+            "longitude": 168.05,
+        },
+    ]
+    assert "storms" not in _generic_bufr_values(message, [values], [1027, 19150, 19106], product_code="ISIC")
+    json.dumps(decoded, ensure_ascii=False)
+
+
+def test_typed_iucc_bufr_exposes_its_single_point_for_the_map():
+    values = [None] * 32
+    values[10:16] = [b"Choi-wan", b"2627", 33, 1, 25.16, 146.6]
+    decoded = _iucc_tropical_cyclone_analysis(values)
+
+    assert decoded["storms"] == [{
+        "subset": 1,
+        "name": "Choi-wan",
+        "international_number": "2627",
+        "tc_identifier": 33,
+        "latitude": 25.16,
+        "longitude": 146.6,
+    }]
