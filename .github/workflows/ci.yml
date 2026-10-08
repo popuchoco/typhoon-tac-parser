@@ -21,9 +21,6 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
       - name: Compile Python source
-        run: python -m compileall -q typhoon_tac_parser tools
+        run: python -m compileall -q typhoon_tac_parser
       - name: Check frontend JavaScript
-        run: |
-          node --check dashboard/common.js
-          node --check dashboard/plot.js
-          node --check dashboard/predict.js
+        run: node --check dashboard/app.js

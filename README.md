@@ -1,149 +1,175 @@
-# 颱風路徑研究工作台
+# Typhoon TAC Parser
 
-本專案是供個人研究與繪圖使用的本機工具，整合熱帶氣旋報文解讀、多機構路徑比較、手動座標預測與路徑圖製作。
+Typhoon TAC Parser 是一個本機用的氣象報文工作台，目標是把常見熱帶氣旋 TAC、部分航空天氣報、偵察/投落送資料，以及熱帶氣旋 BUFR 轉成較容易閱讀的中文解析結果。
 
-它不是中央氣象署、日本氣象廳、JTWC 或其他官方機構的預報系統，所有結果都必須由使用者自行判讀與確認。
+本專案的範圍是**報文解析**：從原始報文擷取可辨識欄位並呈現結構化結果。它不做路徑繪圖、手動座標預測、地圖疊圖或多中心路徑比較；這些功能屬於獨立的 [Typhoon Tracker](https://github.com/popuchoco/typhoon-tracker) 專案。
 
-## 專案定位
+這個專案目前偏向「案例驅動」的解析器：已建立規則的機構與資料類型可以結構化解讀；未列入支援範圍的報文，可能只能讀出 WMO 標頭，或需要人工翻譯與補規則。
 
-工作台分成兩個獨立頁面：
+## 快速開始
 
-- `plot.html`：報文解讀、多機構路徑比較、手動路徑繪圖。
-- `predict.html`：使用者自行填入座標與環境條件的研究用路徑預測。
+安裝依賴：
 
-報文解讀不會自動覆寫座標預測頁面的手動資料，也不會將 ASAS、AUAS、WWJP 等資料自動拆成初始場。
-
-## 主要功能
-
-- 純文字貼上或 `.txt` 上傳報文。
-- 只解讀指定白名單，其他報文保留原文並提示不支援。
-- 解讀後自動把目前位置與預報位置帶入路徑圖。
-- 圖例只顯示機構代碼，例如 `WTCI RCTP` 顯示 `RCTP`。
-- 顯示 BABJ、RJTD、PGTW、RCTP 報文中的風圈資料。
-- 後續點位沒有新半徑時，沿用上一筆半徑繪製；有新資料時從該點更新。
-- 多機構路徑依機構數量自動分色，不限制機構數量。
-- 每個區段都可展開、收合、清除與重新載入。
-- 路徑可使用調色盤選色，並可下載 PNG／JSON。
-- 使用本地 Canvas 與地理資料繪製東亞地圖，不載入 NCDR 圖片。
-
-## 報文白名單
-
-判斷依據為 `TTAA` 類型與機構代碼；`W` 後面的分類編號不影響判斷。
-
-| 報文 | 機構代碼 | 解讀內容 |
-| --- | --- | --- |
-| `WTPH RPMM` | PAGASA | 海上熱帶氣旋警報 |
-| `WTKO RKSL` | KMA | 韓國氣象廳熱帶氣旋報文 |
-| `WTCI RCTP` | CWA | 中央氣象署熱帶氣旋警報 |
-| `WTSS VHHH` | HKO | 香港天文台熱帶氣旋警報 |
-| `WHCI BABJ` | CMA／NMC | 中國氣象局熱帶氣旋登陸資訊 |
-| `WTPQ BABJ` | CMA／NMC | 中國氣象局主觀預報 |
-| `WTPQ RJTD` | JMA RSMC Tokyo | 日本氣象廳熱帶氣旋預報 |
-| `WTPN PGTW` | JTWC／WRNCEN | 聯合颱風警報中心警報 |
-
-RJTD 應使用 `WTPQ RJTD`；`WTPD RJTD` 不在支援範圍。
-
-## 啟動方式
-
-需求：Python 3.10 以上。
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+```bash
 python -m pip install -r requirements.txt
-python -m typhoon_tac_parser.dashboard_server 8766
 ```
 
-啟動後開啟：<http://127.0.0.1:8766/>
+啟動本機工作台：
 
-停止伺服器請在終端機按 `Ctrl+C`。前端不需要 npm 或其他 JavaScript 套件。
+```bash
+python -m typhoon_tac_parser.dashboard_server
+```
 
-## 操作方式
-
-### 報文解讀／路徑繪圖
-
-開啟 `plot.html` 後，可以：
-
-1. 貼上或上傳指定報文。
-2. 按「解讀報文」，查看唯讀解析結果。
-3. 在右側路徑圖查看報文目前位置與預報位置。
-4. 使用「多機構路徑比較」載入同一颱風的多機構路徑。
-5. 使用「手動加入繪圖路徑」增加自行輸入的座標。
-
-多機構純文字可參考 [TYPHOON2000 Multi](https://www.typhoon2000.ph/multi/) 與 [HKWW](https://www.hkww.org/weather/storminfo/index.php) 的資料形式。這類資料不是 WMO TAC，不會改變上方報文白名單。
-
-手動路徑格式：
+預設服務會顯示在：
 
 ```text
-時效小時, 緯度, 經度
-0, 14.5, 126.5
-12, 14.8, 125.3
-24, 15.2, 124.3
+http://127.0.0.1:8766/
 ```
 
-### 座標預測
+如果該 port 已被使用，可以指定其他 port：
 
-開啟 `predict.html` 後，由使用者自行填入：
+```bash
+python -m typhoon_tac_parser.dashboard_server 8820
+```
 
-- 目前位置與前一位置。
-- 初始移動方向／速度或前一時次座標。
-- 慣性係數。
-- 西風帶最南緯度與引導速度。
-- 高壓中心位置、作用半徑與引導速度。
-- 鄰近熱帶系統位置、作用半徑與簡化相互作用速度。
+## 工作台功能
 
-產生的路徑是研究用 heuristic，不是官方預報，也不是 DoraBoy V4.01 原始程式的逐行重製。
+### 報文翻譯器
 
-## 地圖與風圈
+用於貼上 TAC 文字報文並產生中文解析結果。適合已支援的熱帶氣旋警報、Dvorak 衛星分析、BABJ 數字電碼、METAR 等。
 
-- 底圖經度範圍：`101°E–155°E`。
-- 底圖緯度範圍：`8°N–38°N`。
-- 標示北回歸線：`23.5°N`。
-- 包含中央氣象署颱風警報發布區的參考範圍。
-- 中國陸地側不另外套用遮罩；實際警戒範圍以報文為準。
-- 底圖陸地資料由 Natural Earth 50m land 資料轉製，樣式由本工作台自行繪製。
+目前已加入部分熱帶氣旋產品的結構化解析，包括 `WTPQ BABJ`、`WTPQ RJTD`、`WTPN PGTW` 與 `WHCI BABJ`。同一產品代碼的其他中心或不同版型仍需逐例補上解析規則；未支援的報文不會被硬猜。
 
-風圈資料依報文內容繪製：
+### 偵察 / 投落送
 
-- BABJ：30KT、50KT、64KT 象限半徑。
-- RJTD：例如 30KT／50KT 的南北向半徑。
-- PGTW：34KT、50KT 等象限半徑。
-- RCTP：`RADIUS OF OVER 15M/S WINDS` 全向半徑。
+用於 NHC TCPOD 偵察飛行計畫、`XXAA` / `XXBB` TEMP DROP、`UZPQ` / `UZNT` / `UZPA` 類投落送資料。
 
-如果報文只在初始場提供半徑，後續路徑點會沿用該資料以便觀察移動；這不代表官方已發布未來風圈預報。
+這一區不與一般熱帶氣旋警報混用，避免把探空資料誤判成颱風警報。
 
-## HTTP API
+### BUFR 解讀器
 
-本機伺服器提供下列 `POST` 端點，資料格式為 JSON：
+用於上傳 `.bufr` 檔。解析器會先讀取：
 
-| 端點 | 功能 |
+Dashboard API request body limit: 10 MiB; malformed requests return JSON errors.
+
+- WMO binary heading
+- BUFR edition
+- BUFR declared length
+- Section 1 / 3 / 4 基本結構
+- `7777` 結尾
+- ECMWF BUFR Validator 上傳適用性
+
+若本機有 `pybufrkit` 或 ecCodes 類工具，才有機會進一步展開 BUFR descriptor。沒有 BUFR table 展開工具時，解析器只能保守顯示 envelope 與少量固定欄位。
+
+## 目前可解析的資料範圍
+
+| 資料類型 | 支援機構 / 中心 | 可解析內容 | 限制 |
+| --- | --- | --- | --- |
+| 熱帶氣旋 TAC 警報與預報 | `RCTP`、`VHHH`、`VMMC`、`RKSL`、`RPMM`、`BABJ`、`RJTD`、`PGTW` | 基本標頭、機構、中心、時間、系統名稱/編號、定位、氣壓、最大風、移動、風圈與可辨識的預報欄位。 | 目前以西北太平洋與中北太平洋為主；各中心產品格式不同，特殊欄位仍需逐例補強。 |
+| Dvorak / 衛星定位 TAC | `PGTW`、`KNES`、`PHFO` | T/CI、DT/MET/PT、24h 趨勢、短期趨勢、影像通道、定位方式、備註翻譯與分析對象分級。 | 自由文字備註依已建立詞彙翻譯；新句型可能仍會保留英文片段。 |
+| 機構自動 Dvorak 一行式 | `PGTW`、`KNES`、`DEMS`、`RCTP`、`RJTD` 等行尾機構碼 | 洋域、氣旋編號、時間、位置、風速、T/CI、D/S/W 趨勢與發報單位；支援多行批次轉換。 | 只支援已知欄位順序的 `DVTS` 類型。 |
+| BABJ 數字電碼 / TC 發展報 | `BABJ` | `WSCI40` 中文電碼、`TCPQ40` 位置、CI 強度、過去移動、雲型/發展碼與多系統列表。 | 未知四位碼會列為未解析；完整語義依電碼表覆蓋度而定。 |
+| METAR | ICAO 機場代碼 | 測站、ICAO 機場對照、觀測時間、風、能見度、雲、溫度/露點、QNH、趨勢與備註。 | 目前不是完整航空氣象電碼總解碼器；特殊天氣組仍需補規則。 |
+| 偵察 / 投落送 | `KNHC`、`RJTD`、`RCTP` 等已見格式 | NHC TCPOD 飛行計畫、`UZPQ` / `UZNT` / `UZPA` 類 `XXAA` / `XXBB` TEMP DROP、`61616` / `62626` 附加資訊、基本垂直層資料。 | 高度觀測/計算欄位尚非完整 TEMP 解碼；不應與一般颱風警報混用。 |
+| 熱帶氣旋 BUFR | `VHHH`、`RJTD` 及已辨識熱帶氣旋 BUFR 標頭 | BUFR envelope、WMO binary heading、中心/機構、時間、部分熱帶氣旋與 Dvorak 欄位。 | 只宣稱熱帶氣旋相關 BUFR 基本解讀；不支援所有 BUFR 模板。 |
+| BABJ 登陸資訊 | `WHCI BABJ` | 登陸事件、熱帶氣旋名稱/編號、分類、時間、地點與報文風速。 | 地名中文對照以已知詞彙表為限；其他地名保留原文或轉為標題格式。 |
+| 其他未支援報文 | 依產品與中心而異 | 保留原始報文；可讀取的標頭欄位仍會由通用解析器處理。 | 不硬猜未支援欄位；新增格式須以實際樣本與測試補規則。 |
+
+## 常用熱帶氣旋機構代碼
+
+| 代碼 | 機構 |
 | --- | --- |
-| `/api/interpret-allowed-report` | 解讀指定白名單報文 |
-| `/api/interpret-multi-track` | 解讀多機構純文字路徑 |
-| `/api/manual-forecast` | 產生手動研究用路徑 |
-| `/api/translate-tac` | 舊介面相容入口，仍套用白名單 |
-| `/api/decode-bufr` | 解析 BUFR envelope（上傳上限 10 MiB） |
+| `PHFO` | 中太平洋颶風中心 |
+| `PGTW` | 聯合颱風警報中心 |
+| `RPMM` | 菲律賓大氣地球物理與天文服務管理局 |
+| `BABJ` | 中國氣象局 |
+| `RCTP` | 交通部中央氣象署 |
+| `VHHH` | 香港天文台 |
+| `VMMC` | 澳門地球物理氣象局 |
+| `RKSL` | 韓國氣象廳 |
+| `RJTD` | 日本氣象廳 |
+| `KNES` | NOAA 衛星服務部 |
+| `VTBB` | 泰國氣象局 |
+| `DEMS` | 印度氣象局 |
+| `KNHC` | 美國國家氣象局 / 國家颶風中心相關報文中心 |
 
-API 要求使用 `Content-Length`；請求本文上限為 10 MiB。無效 JSON、格式錯誤或超過上限時，伺服器會回傳 JSON 錯誤與對應 HTTP 狀態碼。
+## CLI 用法
+
+解析單一 TAC 檔：
+
+```bash
+python -m typhoon_tac_parser.cli --code examples/VHHH_TROPICAL_CYCLONE_WARNING.txt
+```
+
+解析 BUFR 檔：
+
+```bash
+python -m typhoon_tac_parser.cli --bufr path/to/message.bufr
+```
+
+爬取資料並輸出 JSONL：
+
+```bash
+python -m typhoon_tac_parser.crawler --output data/raw_bulletins.jsonl
+```
+
+解析 JSONL 並輸出 JSON：
+
+```bash
+python -m typhoon_tac_parser.cli --jsonl data/raw_bulletins.jsonl --output data/parsed_bulletins.json
+```
+
+指定單一 URL：
+
+```bash
+python -m typhoon_tac_parser.crawler --url https://www.metoc.navy.mil/jtwc/products/abpwweb.txt
+```
+
+產生 dashboard 靜態資料：
+
+```bash
+python -m typhoon_tac_parser.dashboard_export --jsonl data/raw_bulletins.jsonl --output dashboard/messages.json
+```
 
 ## 專案結構
 
-- `dashboard/`：工作台頁面、樣式、前端程式與地圖資產。
-- `typhoon_tac_parser/`：Python parser、API server、路徑模型與資料處理。
-- `tools/`：地理資料轉換等開發工具。
-- `MANUAL_WORKBENCH.md`：工作台操作補充說明。
-- `ACKNOWLEDGEMENTS.md`：感謝名單與第三方資料來源。
-- `LICENSE`：專案程式碼授權。
+| 路徑 | 用途 |
+| --- | --- |
+| `typhoon_tac_parser/dashboard_server.py` | 本機工作台 HTTP server 與 API。 |
+| `dashboard/` | 前端頁面、樣式與互動邏輯。 |
+| `typhoon_tac_parser/manager.py` | 根據標頭與內容選擇合適 parser。 |
+| `typhoon_tac_parser/parsers/` | 各資料類型與機構的 TAC parser。 |
+| `typhoon_tac_parser/bufr.py` | BUFR envelope 與熱帶氣旋 BUFR 基本解讀。 |
+| `typhoon_tac_parser/centers.py` | 熱帶氣旋機構代碼對照。 |
+| `typhoon_tac_parser/icao_locations.py` | ICAO 機場代碼對照，用於 METAR。 |
+| `typhoon_tac_parser/resources/wsci40-code-table.json` | BABJ WSCI40 數字電碼表。 |
+| `examples/` | 範例報文。 |
+| `tests/` | 自動測試。 |
 
-## 授權與資料來源
+## 驗證與測試
 
-本專案程式碼採用 [MIT License](LICENSE)。
+執行測試：
 
-地圖使用的 Natural Earth 資料來源：[Natural Earth 50m Land](https://www.naturalearthdata.com/downloads/50m-physical-vectors/50m-land/)。報文、網站、機構名稱、商標與原始工具的權利不因本專案而轉移，詳見 [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md)。
+```bash
+python -m pytest
+```
 
-## 使用限制
+GitHub Actions 會在 push 與 pull request 時執行同一組測試。舊版每小時自動爬取報文的 workflow 已移除，避免 repository 自動產生資料變更。
 
-- 所有路徑、風圈與強度結果只供研究、比較與繪圖。
-- 不可將本工具輸出視為官方警報、官方預報或安全決策依據。
-- 報文解析盡量保留原文，但不保證涵蓋所有機構版本與非標準排版。
-- 不會自動擷取外部分析報文作為初始場。
+如果本機沒有 `pytest`，可以先做語法檢查：
+
+```bash
+python -m py_compile typhoon_tac_parser/dashboard_server.py
+```
+
+## 解析原則
+
+- TAC 中的 `/` 代表缺測或無法觀測，不應當成解析失敗。
+- 報文時間一律視為 UTC，除非原文另有明確說明。
+- 對未支援格式不硬猜；應顯示基本標頭、警告或未解析欄位。
+- BUFR 若缺少 table 展開工具，應只宣稱 envelope 與已知固定欄位解讀。
+- 新機構或新報文樣式應以範例驅動新增 parser 與測試。
+
+## 授權
+
+本專案採用 MIT License。詳見 [LICENSE](LICENSE)。

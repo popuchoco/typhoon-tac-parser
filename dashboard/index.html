@@ -1,16 +1,89 @@
 <!doctype html>
 <html lang="zh-Hant">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>颱風路徑研究工作台</title><link rel="stylesheet" href="workbench.css"></head>
-<body>
-  <header class="topbar"><div><p class="eyebrow">Typhoon Workbench</p><h1>颱風路徑研究工作台</h1></div></header>
-  <main class="shell">
-    <section class="hero"><h1>手動建模、報文參考、路徑繪圖</h1><p class="intro">座標預測與路徑繪圖是兩個分開的應用。報文只對指定白名單內的熱帶氣旋報文解讀；使用者仍自行判讀資料，並手動填入預測座標。</p></section>
-    <div class="notice"><strong>接收提醒：</strong> WTPH RPMM、WTKO RKSL、WTCI RCTP、WTSS VHHH、WHCI BABJ、WTPQ BABJ、WTPQ RJTD、WTPN PGTW。W 後面的數字是 WMO 分類編號，不影響判斷；其他報文不會被解析或修改。</div>
-    <section class="cards">
-      <article class="card"><h2>座標預測工具</h2><p>類似 DoraBoy 的初始場設定。使用者手動輸入目前／前一位置、慣性、高壓中心、西風帶與鄰近系統，產生 6 小時間隔的研究用路徑。</p><a class="button primary" href="predict.html">開啟座標預測</a></article>
-      <article class="card"><h2>報文解讀／路徑繪圖</h2><p>貼上或上傳指定報文，查看唯讀解讀結果；解讀後會自動把報文目前位置與預報位置帶入右側路徑圖，圖例只標示機構代碼（例如 RCTP）。另可載入 <a href="https://www.typhoon2000.ph/multi/" target="_blank" rel="noopener noreferrer">TYPHOON2000</a>、<a href="https://www.hkww.org/weather/storminfo/index.php" target="_blank" rel="noopener noreferrer">HKWW</a> 這類同一颱風的多機構比較資料，將各機構路徑分色繪製，機構數量不限。這不是 WMO TAC 解讀器。手動路徑仍可另外輸入或匯入，報文座標不會覆寫預測資料。</p><a class="button primary" href="plot.html">開啟路徑繪圖</a></article>
-    </section>
-    <p class="footer-note">此工具是研究與繪圖輔助，不是官方預報系統；任何座標與強度判斷仍由使用者負責。</p>
-  </main>
-</body>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TAC / BUFR Workbench</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Manual Analysis</p>
+        <h1>TAC / BUFR 報文工作台</h1>
+      </div>
+      <div class="actions">
+        <button id="copyResult" type="button">複製結果</button>
+        <button id="clearAll" type="button">清除</button>
+      </div>
+    </header>
+
+    <main class="workbench">
+      <nav class="main-tabs" aria-label="工具切換">
+        <button class="active" data-tab="tac" type="button">報文翻譯器</button>
+        <button data-tab="recon" type="button">偵察/投落送</button>
+        <button data-tab="bufr" type="button">BUFR 解讀器</button>
+      </nav>
+
+      <section id="tacPanel" class="tool-panel active">
+        <div class="input-panel">
+          <div class="panel-head">
+            <h2>貼上 TAC 報文</h2>
+            <button id="translateTac" type="button">翻譯報文</button>
+          </div>
+          <div class="sample-row" aria-label="TAC 報文範例">
+            <span>TAC 報文範例</span>
+            <button id="sampleCwa" type="button">WTCI RCTP CWA 警報</button>
+          </div>
+          <div class="support-note" role="note">
+            支援範圍依已實作的報文中心與版型逐步擴充，包含 WTPQ BABJ/RJTD、WTPN PGTW 與 WHCI BABJ 等。其他格式不會硬猜，請以原文及未解析欄位為準。
+          </div>
+          <textarea id="tacInput" spellcheck="false" placeholder="例如：WTPQ20 BABJ 071200"></textarea>
+        </div>
+        <div class="output-panel">
+          <h2>翻譯結果</h2>
+          <div id="tacOutput" class="analysis empty">等待 TAC 報文輸入。</div>
+        </div>
+      </section>
+
+      <section id="reconPanel" class="tool-panel">
+        <div class="input-panel">
+          <div class="panel-head">
+            <h2>貼上偵察 / 投落送資料</h2>
+            <button id="translateRecon" type="button">解析資料</button>
+          </div>
+          <div class="support-note" role="note">
+            支援 NHC TCPOD 偵察飛行計畫、UZPQ/XXAA 投落送、無標頭 XXAA/XXBB TEMP DROP；這一區不混入一般颱風警報翻譯。
+          </div>
+          <textarea id="reconInput" spellcheck="false" placeholder="例如：XXAA 59022 99332 11404 ...&#10;&#10;XXBB 59028 99332 11404 ..."></textarea>
+        </div>
+        <div class="output-panel">
+          <h2>解析結果</h2>
+          <div id="reconOutput" class="analysis empty">等待偵察或投落送資料輸入。</div>
+        </div>
+      </section>
+
+      <section id="bufrPanel" class="tool-panel">
+        <div class="input-panel">
+          <div class="panel-head">
+            <h2>上傳 BUFR 檔</h2>
+            <label class="file-button">
+              <input id="bufrInput" type="file" accept=".bufr,application/octet-stream">
+              選擇 BUFR
+            </label>
+          </div>
+          <div id="dropZone" class="drop-zone">
+            <strong>拖放 BUFR 檔案到這裡</strong>
+            <span>解析器會讀取 BUFR envelope、WMO binary heading，並列出 ECMWF BUFR Validator 上傳適用性。</span>
+          </div>
+        </div>
+        <div class="output-panel">
+          <h2>BUFR 解讀結果</h2>
+          <div id="bufrOutput" class="analysis empty">等待 BUFR 檔案。</div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
 </html>

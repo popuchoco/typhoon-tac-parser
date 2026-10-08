@@ -2,7 +2,6 @@ from pathlib import Path
 
 from typhoon_tac_parser.bufr import parse_bufr_envelope
 from typhoon_tac_parser import MessageParserManager
-from typhoon_tac_parser.allowed_reports import interpret_allowed_report
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -97,10 +96,8 @@ PRES  950HPA
 MXWD  080KT
 GUST  115KT
 96HF  120000UTC 32.0N 115.4E 100NM 70% TROPICAL DEPRESSION="""
-    result = interpret_allowed_report(raw)
-    parsed = result["parsed"]
+    parsed = MessageParserManager().parse(raw)
 
-    assert result["supported"] is True
     assert parsed["family"] == "rjtd_tropical_cyclone_advisory"
     assert parsed["systems"][0]["fields"]["position"]["value"] == {"lat": 27.0, "lon": 126.1}
     assert parsed["systems"][0]["fields"]["wind_radii"][0]["value"]["radius_nm"] == 120
@@ -131,10 +128,8 @@ RADIUS OF 034 KT WINDS - 070 NM NORTHEAST QUADRANT
                          080 NM SOUTHWEST QUADRANT
                          090 NM NORTHWEST QUADRANT
 """
-    result = interpret_allowed_report(raw)
-    parsed = result["parsed"]
+    parsed = MessageParserManager().parse(raw)
 
-    assert result["supported"] is True
     assert parsed["family"] == "pgtw_tropical_cyclone_warning"
     assert parsed["systems"][0]["fields"]["position"]["value"] == {"lat": 33.1, "lon": 153.2}
     assert parsed["systems"][0]["fields"]["wind_radii"][0]["value"]["quadrant"] == "NORTHEAST"
@@ -149,12 +144,10 @@ WHCI40 BABJ 280005
 TY 2618 (2618) SAUDEL LANDED ON YUHUAN ZHEJIANG PROVINCE
 280005GMT (35m/s)
 NNNN"""
-    result = interpret_allowed_report(raw)
-    parsed = result["parsed"]
+    parsed = MessageParserManager().parse(raw)
     system = parsed["systems"][0]
     fields = system["fields"]
 
-    assert result["supported"] is True
     assert parsed["family"] == "babj_tropical_cyclone_landfall"
     assert parsed["heading"] == {
         "ttaa": "WHCI",
